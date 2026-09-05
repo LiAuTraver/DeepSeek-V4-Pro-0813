@@ -147,20 +147,20 @@ three zero ratios for effective DSpark layer IDs $L,\ldots,L+L_D-1$.
 
 ## Hierarchical logical dataflow diagrams
 
-The architecture is split into ten independently renderable views. The end-to-end
+The architecture is split into eleven independently renderable views. The end-to-end
 overview is the only block-centric abstraction: its four double-bordered nodes denote the four
-top-level execution regions, and its edge labels name the boundary data or control flow. In every
-diagram: Every rectangular node below is a tensor, tuple of tensors, index state, persistent buffer, or
-returned data bundle. Operators, weights, casts, reshapes, branch predicates, cache writes, and
-collectives are on edges. Amber nodes are persistent mutable state. Dashed-border nodes are
-logical tensors that the fused kernel tile-materializes rather than allocating at full shape.
+top-level execution regions, and its edge labels name the boundary data or control flow. Except for
+explicitly styled policy nodes that compact multi-way branch rules, every rectangular node below is
+a tensor, tuple of tensors, index state, persistent buffer, or returned data bundle. Operators,
+weights, casts, reshapes, branch predicates, cache writes, and collectives remain on edges. Policy
+nodes are compact references to case tables immediately below their diagrams.
 
 Repeated boundary tensors are cross-diagram references to the same semantic state. They do not
 introduce a copy, synchronization point, runtime barrier, or additional materialization. Colors are
 consistent across diagrams: gray is intermediate data, blue is an external or boundary input,
 amber is persistent mutable state, purple is an index, dashed indigo is a logical tile-materialized
-tensor, green is an output, and dashed cyan in the shared-attention view marks a compressed
-interface supplied by a layer-variant diagram.
+tensor, green is an output, dashed cyan in the shared-attention view marks a compressed interface
+supplied by a layer-variant diagram, and dashed orange marks a policy reference.
 
 CSA and HCA are mutually exclusive main-layer alternatives, not consecutive stages. CSA uses
 overlapping ratio-$\rho_C$ compression plus lightning-indexer top-$K_I$ selection; HCA uses
@@ -177,7 +177,7 @@ The four top-level execution blocks and the four outer entry/state objects.
 %%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 28, "rankSpacing": 42}}}%%
 flowchart TD
     OV_PROMPT["$$\mathcal P_0=\{\text{rank-0 raw prompt strings}\}$$"]
-    OV_BUF["$$\mathbf T^{\mathrm{buffer}}\in\mathbb Z^{B\times S_{\mathrm{total}}}\;[\mathrm{INT64}],\quad -1 \to \text{unfilled}$$"]
+    OV_BUF["$$\begin{gathered} \mathbf T^{\mathrm{buffer}}\in\mathbb Z^{B\times S_{\mathrm{total}}}\;[\mathrm{INT64}] \\\\ -1 \to \text{unfilled} \end{gathered}$$"]
     OV_TOK["$$\mathbf T^{\mathrm{call}}\in\mathbb N^{B\times S}\;[\mathrm{INT64}]$$"]
     OV_POS["$$p_0\in\mathbb N,\quad S=1\ \mathrm{if}\ p_0>0$$"]
 
@@ -186,7 +186,7 @@ flowchart TD
     OV_HEAD[["$$\text{Final reduction, LM head, and main return}$$"]]
     OV_SPEC[["$$\text{Separate DSpark }\operatorname{forward\_spec}\text{ API}$$"]]
 
-    OV_PROMPT -.->|"$$\operatorname{broadcast\_object\_list}_{P};\ \operatorname{encode\_messages}\to\operatorname{tokenizer.encode};\ \operatorname{fill}(-1)$$"| OV_BUF
+    OV_PROMPT -.->|"$$\begin{gathered} \operatorname{broadcast\_object\_list}_{P} \\\\ \operatorname{encode\_messages}\to\operatorname{tokenizer.encode} \\\\ \operatorname{fill}(-1) \end{gathered}$$"| OV_BUF
     OV_BUF -.->|"$$\operatorname{slice}\ \mathbf T^{\mathrm{buffer}}[:,p_0:p_0+S]$$"| OV_TOK
     OV_TOK -->|"$$\mathbf T^{\mathrm{call}}$$"| OV_ENTRY
     OV_ENTRY -->|"$$\mathbf X_0\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"| OV_STACK
@@ -196,7 +196,7 @@ flowchart TD
     OV_STACK -.->|"$$\mathbf H_{\mathcal T}\ \text{when the optional API is called}$$"| OV_SPEC
     OV_HEAD -.->|"$$\mathbf y_{\mathrm{main}}\ \text{when the optional API is called}$$"| OV_SPEC
     OV_POS -.->|"$$p_0\ \text{and DSpark cache phase}$$"| OV_SPEC
-    OV_HEAD -.->|"$$\operatorname{where}(\text{prompt mask},\text{ground truth},\mathbf y_{\mathrm{main}});\ \operatorname{write};\ p_0\leftarrow p_0+S$$"| OV_BUF
+    OV_HEAD -.->|"$$\begin{gathered} \operatorname{where}(\text{prompt mask},\text{ground truth},\mathbf y_{\mathrm{main}}) \\\\ \operatorname{write} \\\\ p_0\leftarrow p_0+S \end{gathered}$$"| OV_BUF
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef block fill:#f8fafc,stroke:#334155,color:#0f172a,stroke-width:2px;
@@ -208,13 +208,13 @@ flowchart TD
 
 ```mermaid
 %%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 28, "rankSpacing": 42}}}%%
-flowchart LR
+flowchart TD
     E_TOK["$$\mathbf T^{\mathrm{call}}\in\mathbb N^{B\times S}\;[\mathrm{INT64}]$$"]
     E_H0["$$\mathbf H_0\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     E_X0["$$\mathbf X_0\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
 
-    E_TOK -->|"$$\operatorname{EmbedShard}_{P}\!\left(W_{\mathrm{emb}}^{(p)}\in\mathbb R^{(V/P)\times D}\right);\ \operatorname{AllReduce}_{P}$$"| E_H0
-    E_H0 -->|"$$\operatorname{unsqueeze}_{2};\ \operatorname{repeat}_{M}\ \text{(materialized copy)}$$"| E_X0
+    E_TOK -->|"$$\begin{gathered} \operatorname{EmbedShard}_{P}\!\left(W_{\mathrm{emb}}^{(p)}\in\mathbb R^{(V/P)\times D}\right) \\\\ \operatorname{AllReduce}_{P} \end{gathered}$$"| E_H0
+    E_H0 -->|"$$\begin{gathered} \operatorname{unsqueeze}_{2} \\\\ \operatorname{repeat}_{M}\ \text{(materialized copy)} \end{gathered}$$"| E_X0
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
@@ -234,11 +234,11 @@ boundary tensors (including the mHC map bundles), target taps, loop back-edge, a
 flowchart TD
     D_X0["$$\mathbf X_0\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
     D_XL["$$\mathbf X_{\ell}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}],\quad 0\leq\ell\lt L$$"]
-    D_MAPA["$$\left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell},\mathbf B^{a}_{\ell}\right)\in\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M\times M}\;[\mathrm{FP32}]$$"]
+    D_MAPA["$$\begin{gathered} \left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell},\mathbf B^{a}_{\ell}\right)\;[\mathrm{FP32}] \\\\ \left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell}\right)\in\left(\mathbb R^{B\times S\times M}\right)^2 \\\\ \mathbf B^{a}_{\ell}\in\mathbb R^{B\times S\times M\times M} \end{gathered}$$"]
     D_HA["$$\widehat{\mathbf H}^{a}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     D_YA["$$\mathbf Y_{\ell}^{a}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     D_XA["$$\mathbf X_{\ell}^{a}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
-    D_MAPF["$$\left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell},\mathbf B^{f}_{\ell}\right)\in\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M\times M}\;[\mathrm{FP32}]$$"]
+    D_MAPF["$$\begin{gathered} \left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell},\mathbf B^{f}_{\ell}\right)\;[\mathrm{FP32}] \\\\ \left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell}\right)\in\left(\mathbb R^{B\times S\times M}\right)^2 \\\\ \mathbf B^{f}_{\ell}\in\mathbb R^{B\times S\times M\times M} \end{gathered}$$"]
     D_HF["$$\widehat{\mathbf H}^{f}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     D_YF["$$\mathbf Y_{\ell}^{f}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     D_XNEXT["$$\mathbf X_{\ell+1}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
@@ -246,14 +246,14 @@ flowchart TD
     D_TAP["$$\mathbf H_{\mathcal T}\in\mathbb R^{B\times S\times(|\mathcal T|D)}\;[\mathrm{BF16}]$$"]
 
     D_X0 -->|"$$\ell=0$$"| D_XL
-    D_XL -->|"$$\operatorname{mHC\ map}^{a}_{\ell}:\ \operatorname{flatten};\ \operatorname{Linear};\ \operatorname{hc\_split\_sinkhorn}$$"| D_MAPA
+    D_XL -->|"$$\begin{gathered} \operatorname{mHC\ map}^{a}_{\ell}:\ \operatorname{flatten} \\\\ \operatorname{Linear} \\\\ \operatorname{hc\_split\_sinkhorn} \end{gathered}$$"| D_MAPA
     D_XL -->|"$$\text{residual-stream reduction operand}$$"| D_HA
     D_MAPA -->|"$$\mathbf A^{a}_{\ell}:\ \operatorname{mHCpre}^{a}_{\ell};\ \operatorname{RMSNorm}$$"| D_HA
     D_HA -->|"$$\operatorname{SharedKVAttention}_{\ell}\in\{\mathrm{SWA},\mathrm{CSA},\mathrm{HCA}\}$$"| D_YA
     D_XL -->|"$$\text{saved residual-stream operand}$$"| D_XA
     D_YA -->|"$$\text{attention-branch operand}$$"| D_XA
     D_MAPA -->|"$$\left(\mathbf C^{a}_{\ell},\mathbf B^{a}_{\ell}\right):\ \operatorname{mHCpost}^{a}_{\ell}$$"| D_XA
-    D_XA -->|"$$\operatorname{mHC\ map}^{f}_{\ell}:\ \operatorname{flatten};\ \operatorname{Linear};\ \operatorname{hc\_split\_sinkhorn}$$"| D_MAPF
+    D_XA -->|"$$\begin{gathered} \operatorname{mHC\ map}^{f}_{\ell}:\ \operatorname{flatten} \\\\ \operatorname{Linear} \\\\ \operatorname{hc\_split\_sinkhorn} \end{gathered}$$"| D_MAPF
     D_XA -->|"$$\text{residual-stream reduction operand}$$"| D_HF
     D_MAPF -->|"$$\mathbf A^{f}_{\ell}:\ \operatorname{mHCpre}^{f}_{\ell};\ \operatorname{RMSNorm}$$"| D_HF
     D_HF -->|"$$\operatorname{DeepSeekMoE}_{E,E_a,E_s,D_e}$$"| D_YF
@@ -262,7 +262,7 @@ flowchart TD
     D_MAPF -->|"$$\left(\mathbf C^{f}_{\ell},\mathbf B^{f}_{\ell}\right):\ \operatorname{mHCpost}^{f}_{\ell}$$"| D_XNEXT
     D_XNEXT -->|"$$\ell+1\lt L:\ \text{next block iteration}$$"| D_XL
     D_XNEXT -->|"$$\ell=L-1:\ \text{exit main stack}$$"| D_XFINAL
-    D_XNEXT -->|"$$\ell\in\mathcal T:\ \operatorname{mean}_{M};\ \operatorname{concat}_{D}\text{ in target-layer order}$$"| D_TAP
+    D_XNEXT -->|"$$\begin{gathered} \ell\in\mathcal T:\ \operatorname{mean}_{M} \\\\ \operatorname{concat}_{D}\text{ in target-layer order} \end{gathered}$$"| D_TAP
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
@@ -280,19 +280,19 @@ flowchart TD
     MA_XL["$$\mathbf X_{\ell}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
     MA_XAFP["$$\mathbf X_{\ell,\mathrm{flat}}^{a}\in\mathbb R^{B\times S\times D_{\mathrm{hc}}}\;[\mathrm{FP32}]$$"]
     MA_MUA["$$\boldsymbol{\mu}^{a}_{\ell}\in\mathbb R^{B\times S\times D_{\mu}}\;[\mathrm{FP32}]$$"]
-    MA_MAPA["$$\left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell},\mathbf B^{a}_{\ell}\right)\in\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M\times M}\;[\mathrm{FP32}]$$"]
+    MA_MAPA["$$\begin{gathered} \left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell},\mathbf B^{a}_{\ell}\right)\;[\mathrm{FP32}] \\\\ \left(\mathbf A^{a}_{\ell},\mathbf C^{a}_{\ell}\right)\in\left(\mathbb R^{B\times S\times M}\right)^2 \\\\ \mathbf B^{a}_{\ell}\in\mathbb R^{B\times S\times M\times M} \end{gathered}$$"]
     MA_UA["$$\mathbf U^{a}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     MA_HA["$$\widehat{\mathbf H}^{a}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     MA_YA["$$\mathbf Y_{\ell}^{a}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     MA_XA["$$\mathbf X_{\ell}^{a}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
 
     MA_XL -->|"$$\operatorname{flatten}_{M,D};\ \mathrm{BF16}\to\mathrm{FP32}$$"| MA_XAFP
-    MA_XAFP -->|"$$\operatorname{Linear}\!\left(W_{\mathrm{hc},a}^{\ell}\in\mathbb R^{D_{\mu}\times D_{\mathrm{hc}}}\right)\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right)$$"| MA_MUA
-    MA_MUA -->|"$$\operatorname{hc\_split\_sinkhorn}_{I_{\mathrm{SK}}}:\ \sigma,\ 2\sigma,\ \text{row-softmax and alternating normalizations}$$"| MA_MAPA
-    MA_XAFP -->|"$$\operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D];\ \mathbf U^a_{\ell}=\sum_{j=0}^{M-1}A^a_{\ell,j}\mathbf X^a_{\ell,\mathrm{FP32},j};\ \mathrm{BF16}$$"| MA_UA
+    MA_XAFP -->|"$$\begin{gathered} \operatorname{Linear}\!\left(W_{\mathrm{hc},a}^{\ell}\in\mathbb R^{D_{\mu}\times D_{\mathrm{hc}}}\right) \\\\ {}\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right) \end{gathered}$$"| MA_MUA
+    MA_MUA -->|"$$\begin{gathered} \operatorname{hc\_split\_sinkhorn}_{I_{\mathrm{SK}}}:\ \sigma,\ 2\sigma \\\\ \text{row-softmax and alternating normalizations} \end{gathered}$$"| MA_MAPA
+    MA_XAFP -->|"$$\begin{gathered} \operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D] \\\\ \mathbf U^a_{\ell}=\sum_{j=0}^{M-1}A^a_{\ell,j}\mathbf X^a_{\ell,\mathrm{FP32},j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MA_UA
     MA_MAPA -->|"$$\mathbf A^a_{\ell}\ \text{is the reduction operand}$$"| MA_UA
     MA_UA -->|"$$\operatorname{RMSNorm}_{\gamma^{a}_{\ell},\epsilon_n};\ \text{FP32 statistics, BF16 output}$$"| MA_HA
-    MA_YA -->|"$$\mathbf X_{\ell,k}^{a}=C_{\ell,k}^{a}\mathbf Y_{\ell}^{a}+\sum_{j=0}^{M-1}B_{\ell,j,k}^{a}\mathbf X_{\ell,j};\ \mathrm{FP32}\to\mathrm{BF16}$$"| MA_XA
+    MA_YA -->|"$$\begin{gathered} \mathbf X_{\ell,k}^{a}=C_{\ell,k}^{a}\mathbf Y_{\ell}^{a}+\sum_{j=0}^{M-1}B_{\ell,j,k}^{a}\mathbf X_{\ell,j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MA_XA
     MA_XL -->|"$$\text{saved BF16 residual operand (alias, not copy)}$$"| MA_XA
     MA_MAPA -->|"$$\left(\mathbf C_{\ell}^{a},\mathbf B_{\ell}^{a}\right)\ \text{are post-mix operands}$$"| MA_XA
 
@@ -337,56 +337,56 @@ flowchart TD
     A_QR["$$\mathbf Q_{\ell}^{r}\in\mathbb R^{B\times S\times R_q}\;[\mathrm{BF16}]$$"]
     A_Q["$$\mathbf Q_{\ell}^{(p)}\in\mathbb R^{B\times S\times N_h^{(p)}\times d_h}\;[\mathrm{BF16}]$$"]
     A_KVNOW["$$\mathbf{KV}^{\mathrm{now}}_{\ell}\in\mathbb R^{B\times S\times d_h}\;[\mathrm{BF16}]$$"]
-    A_KVLOCAL["$$\mathbf{KV}^{\mathrm{local}}_{\ell}\in\mathbb R^{B\times N_{\mathrm{local}}\times d_h}\;[\mathrm{BF16}]$$"]
-    A_RING["$$\mathcal K^{\mathrm{ring}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,0:W,:]\in\mathbb R^{B_{\max}\times W\times d_h}\;[\mathrm{BF16}]$$"]
+    A_KVLOCAL["$$\begin{gathered} \mathbf{KV}^{\mathrm{local}}_{\ell}\in\mathbb R^{B\times N_{\mathrm{local}}\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    A_RING["$$\begin{gathered} \mathcal K^{\mathrm{ring}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,0:W,:] \\\\ \mathcal K^{\mathrm{ring}}_{\ell}\in\mathbb R^{B_{\max}\times W\times d_h}\;[\mathrm{BF16}] \end{gathered}$$"]
     A_IWIN["$$\mathbf I^{\mathrm{win}}_{\ell}\in\mathbb Z^{B\times S\times\bar K^{\mathrm{win}}}\;[\mathrm{INT32}]$$"]
 
-    A_CEMIT["$$\mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{BF16}],\quad \rho_\ell>0$$"]
-    A_CCACHE["$$\mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:]\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_\ell\rfloor\times d_h}\;[\mathrm{BF16}],\quad \rho_\ell>0$$"]
+    A_CEMIT["$$\begin{gathered} \mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{BF16}] \\\\ \rho_\ell>0 \end{gathered}$$"]
+    A_CCACHE["$$\begin{gathered} \mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:] \\\\ \mathcal K^{\mathrm{comp}}_{\ell}\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_\ell\rfloor\times d_h} \\\\ [\mathrm{BF16}],\quad \rho_\ell>0 \end{gathered}$$"]
     A_IEMPTY["$$\varnothing\in\mathbb Z^{B\times S\times0}\;[\mathrm{INT32}]$$"]
-    A_IHIST["$$\mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times\bar K_{\ell}^{\mathrm{hist}}}\;[\mathrm{INT32}]$$"]
+    A_IHIST["$$\begin{gathered} \mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times\bar K_{\ell}^{\mathrm{hist}}} \\\\ [\mathrm{INT32}] \end{gathered}$$"]
 
     A_IALL["$$\mathbf I_{\ell}\in\mathbb Z^{B\times S\times\bar K_{\ell}}\;[\mathrm{INT32}]$$"]
-    A_KVBANK["$$\mathcal K_{\ell}\in\mathbb R^{B\times N_{\ell}^{kv}\times d_h}\;[\mathrm{BF16}],\quad \mathrm{key}=\mathrm{value}$$"]
-    A_KVG["$$\widetilde{\mathbf{KV}}_{\ell}\in\mathbb R^{B\times S\times\bar K_{\ell}\times d_h}\;[\mathrm{BF16,\ padded\ logical}]$$"]
-    A_ZATTN["$$\mathbf Z^{a,(p)}_{\ell}\in\mathbb R^{B\times S\times N_h^{(p)}\times\bar K_{\ell}}\;[\mathrm{FP32,\ tiled\ logical}]$$"]
+    A_KVBANK["$$\begin{gathered} \mathcal K_{\ell}\in\mathbb R^{B\times N_{\ell}^{kv}\times d_h}\;[\mathrm{BF16}] \\\\ \mathrm{key}=\mathrm{value} \end{gathered}$$"]
+    A_KVG["$$\begin{gathered} \widetilde{\mathbf{KV}}_{\ell}\in\mathbb R^{B\times S\times\bar K_{\ell}\times d_h} \\\\ [\mathrm{BF16,\ padded\ logical}] \end{gathered}$$"]
+    A_ZATTN["$$\begin{gathered} \mathbf Z^{a,(p)}_{\ell}\in\mathbb R^{B\times S\times N_h^{(p)}\times\bar K_{\ell}} \\\\ [\mathrm{FP32,\ tiled\ logical}] \end{gathered}$$"]
     A_SINK["$$\mathbf z_{\ell}^{\mathrm{sink},(p)}\in\mathbb R^{N_h^{(p)}}\;[\mathrm{FP32}]$$"]
     A_OATTN["$$\mathbf O_{\ell}^{(p)}\in\mathbb R^{B\times S\times N_h^{(p)}\times d_h}\;[\mathrm{BF16}]$$"]
-    A_OREL["$$\widetilde{\mathbf O}_{\ell}^{(p)}\in\mathbb R^{B\times S\times N_h^{(p)}\times d_h}\;[\mathrm{BF16}]$$"]
+    A_OREL["$$\begin{gathered} \widetilde{\mathbf O}_{\ell}^{(p)}\in\mathbb R^{B\times S\times N_h^{(p)}\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
     A_OG["$$\mathbf O_{\ell}^{G,(p)}\in\mathbb R^{B\times S\times G^{(p)}\times R_o}\;[\mathrm{BF16}]$$"]
     A_YA["$$\mathbf Y_{\ell}^{a}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
 
-    A_HA -->|"$$\operatorname{FP8Linear}\!\left(W_{q,a}^{\ell}\in\mathbb R^{R_q\times D}\right);\ Q_A\text{-block activation quantization, FP32 accumulation}$$"| A_QR0
+    A_HA -->|"$$\begin{gathered} \operatorname{FP8Linear}\!\left(W_{q,a}^{\ell}\in\mathbb R^{R_q\times D}\right) \\\\ Q_A\text{-block activation quantization, FP32 accumulation} \end{gathered}$$"| A_QR0
     A_QR0 -->|"$$\operatorname{RMSNorm}_{\gamma_q,\epsilon_n};\ \mathrm{FP32}\to\mathrm{BF16}$$"| A_QR
-    A_QR -->|"$$\operatorname{ColumnParallelFP8Linear}\!\left(W_{q,b}^{\ell,(p)}\in\mathbb R^{(N_h^{(p)}d_h)\times R_q}\right);\ \operatorname{unflatten};\ \operatorname{RMS}^{-1}_{d_h}\text{ in BF16};\ \operatorname{RoPE}_{d_r}$$"| A_Q
+    A_QR -->|"$$\begin{gathered} \operatorname{ColumnParallelFP8Linear}\!\left(W_{q,b}^{\ell,(p)}\in\mathbb R^{(N_h^{(p)}d_h)\times R_q}\right) \\\\ \operatorname{unflatten};\ \operatorname{RMS}^{-1}_{d_h}\text{ in BF16} \\\\ \operatorname{RoPE}_{d_r} \end{gathered}$$"| A_Q
     A_POS -->|"$$\operatorname{slice\_phase}(p_0:p_0+S)$$"| A_Q
 
-    A_HA -->|"$$\operatorname{FP8Linear}\!\left(W_{kv}^{\ell}\in\mathbb R^{d_h\times D}\right);\ \operatorname{RMSNorm}_{d_h};\ \operatorname{RoPE}_{d_r};\ Q_{KV}\text{-block FP8 QDQ on }d_n$$"| A_KVNOW
+    A_HA -->|"$$\begin{gathered} \operatorname{FP8Linear}\!\left(W_{kv}^{\ell}\in\mathbb R^{d_h\times D}\right) \\\\ \operatorname{RMSNorm}_{d_h};\ \operatorname{RoPE}_{d_r} \\\\ Q_{KV}\text{-block FP8 QDQ on }d_n \end{gathered}$$"| A_KVNOW
     A_POS -->|"$$\operatorname{slice\_phase}(p_0:p_0+S)$$"| A_KVNOW
     A_KVNOW -->|"$$p_0=0:\ \text{current prefill KV source}$$"| A_KVLOCAL
-    A_KVNOW -->|"$$p_0=0:\ \text{write the final }\min(S,W)\text{ entries, circularly if }S>W;\quad p_0>0:\ \text{write the current entry at }p_0\bmod W$$"| A_RING
+    A_KVNOW -->|"$$\begin{gathered} p_0=0:\ \text{write the final }\min(S,W)\text{ entries, circularly if }S>W \\\\ p_0>0:\ \text{write the current entry at }p_0\bmod W \end{gathered}$$"| A_RING
     A_RING -->|"$$p_0>0:\ \text{decode KV source after current-slot write}$$"| A_KVLOCAL
     A_POS -->|"$$\operatorname{causal\_window\_indices}(p_0,S,W);\ -1\text{ padding}$$"| A_IWIN
 
     A_IEMPTY -->|"$$\ell\in\mathcal L_{\mathrm{SWA}}:\ \bar K_{\ell}^{\mathrm{hist}}=0$$"| A_IHIST
     A_IWIN -->|"$$\operatorname{concat}_{-1}$$"| A_IALL
     A_IHIST -->|"$$\operatorname{concat}_{-1}$$"| A_IALL
-    %% A_KVLOCAL -->|"$$p_0=0,\rho_\ell=0:\ \mathbf{KV}^{\mathrm{local}}_{\ell};\quad p_0=0,\rho_\ell>0:\ \operatorname{concat}(\mathbf{KV}^{\mathrm{local}}_{\ell},\mathbf C_{\ell}^{\mathrm{emit}});\quad p_0>0,\rho_\ell=0:\ \mathcal K_{\ell}^{\mathrm{ring}};\quad p_0>0,\rho_\ell>0:\ \operatorname{select}\mathcal K_{\ell}^{\mathrm{layer}},\ \mathcal K_{\ell}^{\mathrm{layer}}=[\mathcal K_{\ell}^{\mathrm{ring}}\mathbin{\Vert}\mathcal K_{\ell}^{\mathrm{comp}}]\ \text{is an existing contiguous allocation; no concat or copy}$$"| A_KVBANK
-    A_KVLOCAL --> KV_LOGIC["KV Allocation Policy"] --> A_KVBANK
-    A_CEMIT -->|"$$p_0=0,\rho_\ell>0:\ \text{post-norm, post-RoPE, post-QDQ compressed entries}$$"| A_KVBANK
-    A_CCACHE -->|"$$p_0>0,\rho_\ell>0:\ \text{persistent compressed-history region}$$"| A_KVBANK
+    A_KVLOCAL -->|"$$\text{local or ring KV operand}$$"| KV_LOGIC[["$$\text{KV allocation policy}$$"]]
+    A_CEMIT -->|"$$p_0=0,\rho_\ell>0:\ \text{new compressed operand}$$"| KV_LOGIC
+    A_CCACHE -->|"$$p_0>0,\rho_\ell>0:\ \text{persistent compressed alias}$$"| KV_LOGIC
+    KV_LOGIC -->|"$$\begin{gathered} \text{phase/family selection} \\\\ \text{see strategy below} \end{gathered}$$"| A_KVBANK
 
-    A_KVBANK -->|"$$\operatorname{gather}_{Q_S\text{-entry tiles}}\!\left(\mathbf I_{\ell}\right)\ \text{inside sparse kernel}$$"| A_KVG
-    A_IALL -->|"$$\text{logical gather addresses shared by all }N_h^{(p)}\text{ query heads}$$"| A_KVG
-    A_Q -->|"$$\mathbf Z^{a}_{\ell,t,h,j}=\left\langle\mathbf Q_{\ell,t,h},\widetilde{\mathbf{KV}}_{\ell,t,j}\right\rangle/\sqrt{d_h};\ \mathrm{FP32\ accumulation}$$"| A_ZATTN
+    A_KVBANK -->|"$$\begin{gathered} \operatorname{gather}_{Q_S\text{-entry tiles}}\!\left(\mathbf I_{\ell}\right) \\\\ \text{inside sparse kernel} \end{gathered}$$"| A_KVG
+    A_IALL -->|"$$\begin{gathered} \text{logical gather addresses} \\\\ \text{shared by all }N_h^{(p)}\text{ query heads} \end{gathered}$$"| A_KVG
+    A_Q -->|"$$\begin{gathered} \mathbf Z^{a}_{\ell,t,h,j}= \\\\ \left\langle\mathbf Q_{\ell,t,h},\widetilde{\mathbf{KV}}_{\ell,t,j}\right\rangle/\sqrt{d_h} \\\\ \mathrm{FP32\ accumulation} \end{gathered}$$"| A_ZATTN
     A_KVG -->|"$$\text{shared-key operand broadcast over }N_h^{(p)}$$"| A_ZATTN
-    A_ZATTN -->|"$$\operatorname{online\_softmax}_{\mathrm{FP32}};\ \exp(z^{\mathrm{sink}}_{\ell,h})\text{ only in denominator};\ \operatorname{value\_GEMM}_{\mathrm{BF16}\to\mathrm{FP32}}$$"| A_OATTN
+    A_ZATTN -->|"$$\begin{gathered} \operatorname{online\_softmax}_{\mathrm{FP32}} \\\\ \exp(z^{\mathrm{sink}}_{\ell,h})\text{ only in denominator} \\\\ \operatorname{value\_GEMM}_{\mathrm{BF16}\to\mathrm{FP32}} \end{gathered}$$"| A_OATTN
     A_KVG -->|"$$\text{the same shared entries are value operands}$$"| A_OATTN
     A_SINK -->|"$$\text{denominator-only sink operand}$$"| A_OATTN
     A_OATTN -->|"$$\operatorname{RoPE}^{-1}_{d_r}\text{ using conjugated query-position phase}$$"| A_OREL
     A_POS -->|"$$\operatorname{slice\_phase}(p_0:p_0+S);\ \operatorname{conjugate}$$"| A_OREL
-    A_OREL -->|"$$\operatorname{view}\ [N_h^{(p)},d_h]\to[G^{(p)},H_gd_h];\ \operatorname{einsum}_{\mathrm{BF16}}\!\left(W_{o,a}^{\ell,(p)}\in\mathbb R^{G^{(p)}\times R_o\times(H_gd_h)}\right)$$"| A_OG
-    A_OG -->|"$$\operatorname{flatten}_{G^{(p)},R_o};\ \operatorname{RowParallelFP8Linear}\!\left(W_{o,b}^{\ell,(p)}\in\mathbb R^{D\times(G^{(p)}R_o)}\right);\ \operatorname{AllReduce}_{P,\mathrm{FP32}};\ \mathrm{BF16}$$"| A_YA
+    A_OREL -->|"$$\begin{gathered} \operatorname{view}\ [N_h^{(p)},d_h]\to[G^{(p)},H_gd_h] \\\\ W_{o,a}^{\ell,(p)}\in\mathbb R^{G^{(p)}\times R_o\times(H_gd_h)} \\\\ \operatorname{einsum}_{\mathrm{BF16}}\!\left(W_{o,a}^{\ell,(p)}\right) \end{gathered}$$"| A_OG
+    A_OG -->|"$$\begin{gathered} \operatorname{flatten}_{G^{(p)},R_o} \\\\ \operatorname{RowParallelFP8Linear}\!\left(W_{o,b}^{\ell,(p)}\in\mathbb R^{D\times(G^{(p)}R_o)}\right) \\\\ \operatorname{AllReduce}_{P,\mathrm{FP32}};\ \mathrm{BF16} \end{gathered}$$"| A_YA
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
@@ -395,6 +395,7 @@ flowchart TD
     classDef logical fill:#eef2ff,stroke:#4338ca,color:#1e1b4b,stroke-width:1.2px,stroke-dasharray:5 3;
     classDef output fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:1.7px;
     classDef interface fill:#ecfeff,stroke:#0e7490,color:#164e63,stroke-width:1.5px,stroke-dasharray:4 2;
+    classDef policy fill:#fff7ed,stroke:#c2410c,color:#431407,stroke-width:1.7px,stroke-dasharray:3 2;
 
     class A_HA,A_POS input;
     class A_QR0,A_QR,A_Q,A_KVNOW,A_KVLOCAL,A_KVBANK,A_SINK,A_OATTN,A_OREL,A_OG data;
@@ -402,6 +403,7 @@ flowchart TD
     class A_IWIN,A_IEMPTY,A_IALL index;
     class A_CEMIT,A_CCACHE,A_IHIST interface;
     class A_KVG,A_ZATTN logical;
+    class KV_LOGIC policy;
     class A_YA output;
 ```
 
@@ -416,11 +418,56 @@ $$
 \operatorname{select}\left(\mathcal{K}_{\ell}^{\mathrm{layer}}\right), & p_0 > 0,\ \rho_\ell > 0 \end{cases} \tag{1}
 $$
 
-(Contiguous allocation w/ no copy.)
+In compressed decode, the ring and compressed regions are alias slices of one existing contiguous
+layer allocation; selecting the bank performs no concatenation or copy.
 
-#### CSA compressed-history and lightning-indexer path
+#### CSA compressed-history and lightning-indexer paths
 
-Applies only when $\ell\in\mathcal L_{\mathrm{CSA}}$. Its attention compressor and lightning indexer are distinct modules with distinct FP32 projection weights, incomplete-state pairs, and persistent output caches (compressed shared-KV versus compressed index keys).
+Applies only when $\ell\in\mathcal L_{\mathrm{CSA}}$.
+
+##### CSA attention-compressor path
+
+```mermaid
+%%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 24, "rankSpacing": 36}}}%%
+flowchart TD
+    C_HA["$$\widehat{\mathbf H}^{a}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
+    C_POS["$$p_0\in\mathbb N,\quad S=1\ \mathrm{if}\ p_0>0$$"]
+
+    C_CRAW["$$\mathbf C^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times(2d_h)}\;[\mathrm{FP32}]$$"]
+    C_ZRAW["$$\mathbf Z^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times(2d_h)}\;[\mathrm{FP32}]$$"]
+    C_CSTATE["$$\begin{gathered} \left(\mathcal S_{\ell}^{kv},\mathcal S_{\ell}^{z}\right) \\\\ \text{each in }\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_h)}\;[\mathrm{FP32}] \end{gathered}$$"]
+    C_CVAL["$$\begin{gathered} \mathbf C^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times(2\rho_C)\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    C_CGATE["$$\begin{gathered} \mathbf Z^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times(2\rho_C)\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    C_CNEW["$$\begin{gathered} \mathbf C^{\mathrm{pool}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    C_CEMIT["$$\begin{gathered} \mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    C_CCACHE["$$\begin{gathered} \mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:] \\\\ \mathcal K^{\mathrm{comp}}_{\ell}\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_C\rfloor\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+
+    C_HA -->|"$$\begin{gathered} \mathrm{BF16}\to\mathrm{FP32} \\\\ \operatorname{Linear}\!\left(W_{c,kv}^{\ell}\in\mathbb R^{(2d_h)\times D}\right) \end{gathered}$$"| C_CRAW
+    C_HA -->|"$$\begin{gathered} \mathrm{BF16}\to\mathrm{FP32} \\\\ \operatorname{Linear}\!\left(W_{c,z}^{\ell}\in\mathbb R^{(2d_h)\times D}\right) \end{gathered}$$"| C_ZRAW
+    C_CRAW -->|"$$\begin{gathered} p_0=0:\ \operatorname{overlap}_{\rho_C} \\\\ \text{complete current-call blocks} \end{gathered}$$"| C_CVAL
+    C_ZRAW -->|"$$\begin{gathered} p_0=0:\ +\operatorname{APE}_{\rho_C} \\\\ \operatorname{overlap}_{\rho_C}\text{ over complete current-call blocks} \end{gathered}$$"| C_CGATE
+    C_CSTATE -->|"$$\begin{gathered} p_0>0:\ \text{updated state} \\\\ \text{prior-plus-current overlap-value operand} \end{gathered}$$"| C_CVAL
+    C_CSTATE -->|"$$\begin{gathered} p_0>0:\ \text{updated overlap-gate operand} \\\\ -\infty\text{ for a missing predecessor} \end{gathered}$$"| C_CGATE
+    C_CRAW -->|"$$\begin{gathered} \text{prefill previous-block/remainder snapshots} \\\\ \text{or decode slot write} \end{gathered}$$"| C_CSTATE
+    C_ZRAW -->|"$$\begin{gathered} +\operatorname{APE}\text{ at the stored token slot} \\\\ \text{prefill/decode score-state write} \end{gathered}$$"| C_CSTATE
+    C_POS -->|"$$\begin{gathered} p_0=0:\ \operatorname{select\_prefill\_overlap/remainder} \\\\ p_0>0:\ \operatorname{select\_decode\_slot}(p_0\bmod\rho_C) \end{gathered}$$"| C_CSTATE
+    C_CVAL -->|"$$\begin{gathered} \operatorname{softmax}_{2\rho_C}\!\left(\mathbf Z^{\mathrm{src}}_{\ell}\right) \\\\ \text{feature-wise multiply by }\mathbf C^{\mathrm{src}}_{\ell} \\\\ \operatorname{reduce\_sum}_{2\rho_C} \end{gathered}$$"| C_CNEW
+    C_CGATE -->|"$$\text{feature-wise gate operand for the weighted reduction}$$"| C_CNEW
+    C_CNEW -->|"$$\begin{gathered} \mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm}_{d_h} \\\\ \operatorname{RoPE}_{d_r};\ Q_{KV}\text{-block FP8 QDQ on }d_n \end{gathered}$$"| C_CEMIT
+    C_POS -->|"$$\begin{gathered} p_0=0:\ C_{\ell}^{\mathrm{new}}=\lfloor S/\rho_C\rfloor \\\\ p_0>0:\ C_{\ell}^{\mathrm{new}}=\mathbf1[(p_0+1)\bmod\rho_C=0] \\\\ \operatorname{block\_start\_phase}_{\rho_C} \end{gathered}$$"| C_CEMIT
+    C_CEMIT -->|"$$\operatorname{cache\_write}\text{ into the compressed alias view}$$"| C_CCACHE
+
+    classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
+    classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
+    classDef cache fill:#fff4d6,stroke:#b7791f,color:#422006,stroke-width:1.6px;
+    classDef output fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:1.7px;
+    class C_HA,C_POS input;
+    class C_CRAW,C_ZRAW,C_CVAL,C_CGATE,C_CNEW data;
+    class C_CSTATE,C_CCACHE cache;
+    class C_CEMIT output;
+```
+
+##### CSA lightning-indexer path
 
 ```mermaid
 %%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 24, "rankSpacing": 36}}}%%
@@ -429,63 +476,37 @@ flowchart TD
     C_QR["$$\mathbf Q_{\ell}^{r}\in\mathbb R^{B\times S\times R_q}\;[\mathrm{BF16}]$$"]
     C_POS["$$p_0\in\mathbb N,\quad S=1\ \mathrm{if}\ p_0>0$$"]
 
-    C_CRAW["$$\mathbf C^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times(2d_h)}\;[\mathrm{FP32}]$$"]
-    C_ZRAW["$$\mathbf Z^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times(2d_h)}\;[\mathrm{FP32}]$$"]
-    C_CSTATE["$$\left(\mathcal S_{\ell}^{kv},\mathcal S_{\ell}^{z}\right)\in\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_h)}\times\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_h)}\;[\mathrm{FP32}]$$"]
-    C_CVAL["$$\mathbf C^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times(2\rho_C)\times d_h}\;[\mathrm{FP32}]$$"]
-    C_CGATE["$$\mathbf Z^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times(2\rho_C)\times d_h}\;[\mathrm{FP32}]$$"]
-    C_CNEW["$$\mathbf C^{\mathrm{pool}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{FP32}]$$"]
-    C_CEMIT["$$\mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{BF16}]$$"]
-    C_CCACHE["$$\mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:]\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_C\rfloor\times d_h}\;[\mathrm{BF16}]$$"]
+    C_QI["$$\begin{gathered} \mathbf Q^{I,(p)}_{\ell}\in\mathbb R^{B\times S\times N_I^{(p)}\times d_I} \\\\ [\mathrm{BF16\ after\ FP4\ QDQ}] \end{gathered}$$"]
+    C_IRAW["$$\begin{gathered} \left(\mathbf K^{I,\mathrm{raw}}_{\ell},\mathbf Z^{I,\mathrm{raw}}_{\ell}\right) \\\\ \text{each in }\mathbb R^{B\times S\times(2d_I)}\;[\mathrm{FP32}] \end{gathered}$$"]
+    C_ISTATE["$$\begin{gathered} \left(\mathcal S^{I,kv}_{\ell},\mathcal S^{I,z}_{\ell}\right) \\\\ \text{each in }\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_I)}\;[\mathrm{FP32}] \end{gathered}$$"]
+    C_KI["$$\begin{gathered} \mathcal K^{I}_{\ell}\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_C\rfloor\times d_I} \\\\ [\mathrm{BF16\ after\ FP4\ QDQ}] \end{gathered}$$"]
+    C_WI["$$\begin{gathered} \boldsymbol{\omega}^{I,(p)}_{\ell}\in\mathbb R^{B\times S\times N_I^{(p)}} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    C_ISCORE["$$\begin{gathered} \mathbf J_{\ell}\in\mathbb R^{B\times S\times C_{\ell}} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    C_IHIST["$$\begin{gathered} \mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times\min(K_I,C_{\ell})} \\\\ [\mathrm{INT32}] \end{gathered}$$"]
 
-    C_QI["$$\mathbf Q^{I,(p)}_{\ell}\in\mathbb R^{B\times S\times N_I^{(p)}\times d_I}\;[\mathrm{BF16\ after\ FP4\ QDQ}]$$"]
-    C_IRAW["$$\left(\mathbf K^{I,\mathrm{raw}}_{\ell},\mathbf Z^{I,\mathrm{raw}}_{\ell}\right)\in\mathbb R^{B\times S\times(2d_I)}\times\mathbb R^{B\times S\times(2d_I)}\;[\mathrm{FP32}]$$"]
-    C_ISTATE["$$\left(\mathcal S^{I,kv}_{\ell},\mathcal S^{I,z}_{\ell}\right)\in\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_I)}\times\mathbb R^{B_{\max}\times(2\rho_C)\times(2d_I)}\;[\mathrm{FP32}]$$"]
-    C_KI["$$\mathcal K^{I}_{\ell}\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_C\rfloor\times d_I}\;[\mathrm{BF16\ after\ FP4\ QDQ}]$$"]
-    C_WI["$$\boldsymbol{\omega}^{I,(p)}_{\ell}\in\mathbb R^{B\times S\times N_I^{(p)}}\;[\mathrm{BF16}]$$"]
-    C_ISCORE["$$\mathbf J_{\ell}\in\mathbb R^{B\times S\times C_{\ell}}\;[\mathrm{BF16}]$$"]
-    C_IHIST["$$\mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times\min(K_I,C_{\ell})}\;[\mathrm{INT32}]$$"]
-
-    C_HA -->|"$$\mathrm{FP32};\ \operatorname{Linear}\!\left(W_{c,kv}^{\ell}\in\mathbb R^{(2d_h)\times D}\right)$$"| C_CRAW
-    C_HA -->|"$$\mathrm{FP32};\ \operatorname{Linear}\!\left(W_{c,z}^{\ell}\in\mathbb R^{(2d_h)\times D}\right)$$"| C_ZRAW
-    C_CRAW -->|"$$p_0=0:\ \operatorname{overlap}_{\rho_C}\ \text{for complete current-call blocks}$$"| C_CVAL
-    C_ZRAW -->|"$$p_0=0:\ +\operatorname{APE}_{\rho_C};\ \operatorname{overlap}_{\rho_C}\ \text{for complete current-call blocks}$$"| C_CGATE
-    C_CSTATE -->|"$$p_0>0:\ \text{updated (prior plus current) overlap-value operand}$$"| C_CVAL
-    C_CSTATE -->|"$$p_0>0:\ \text{updated overlap-gate operand};\ -\infty\text{ for a missing predecessor}$$"| C_CGATE
-    C_CRAW -->|"$$\text{prefill previous-block/remainder snapshots or decode slot write}$$"| C_CSTATE
-    C_ZRAW -->|"$$+\operatorname{APE}\text{ at the stored token slot};\ \text{prefill/decode score-state write}$$"| C_CSTATE
-    C_POS -->|"$$p_0=0:\ \operatorname{select\_prefill\_overlap/remainder};\quad p_0>0:\ \operatorname{select\_decode\_slot}(p_0\bmod\rho_C)$$"| C_CSTATE
-    C_CVAL -->|"$$\operatorname{softmax}_{2\rho_C}\!\left(\mathbf Z^{\mathrm{src}}_{\ell}\right)\odot\mathbf C^{\mathrm{src}}_{\ell};\ \sum_{2\rho_C}$$"| C_CNEW
-    C_CGATE -->|"$$\text{feature-wise gate operand for the weighted reduction}$$"| C_CNEW
-    C_CNEW -->|"$$\mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm}_{d_h};\ \operatorname{RoPE}_{d_r};\ Q_{KV}\text{-block FP8 QDQ on }d_n$$"| C_CEMIT
-    C_POS -->|"$$p_0=0:\ C_{\ell}^{\mathrm{new}}=\lfloor S/\rho_C\rfloor;\quad p_0>0:\ C_{\ell}^{\mathrm{new}}=\mathbf1[(p_0+1)\bmod\rho_C=0];\ \operatorname{block\_start\_phase}_{\rho_C}$$"| C_CEMIT
-    C_CEMIT -->|"$$\operatorname{cache\_write}\text{ into the compressed alias view}$$"| C_CCACHE
-
-    C_QR -->|"$$\operatorname{ColumnParallelFP8Linear}\!\left(W_{Iq}^{\ell,(p)}\in\mathbb R^{(N_I^{(p)}d_I)\times R_q}\right);\ \operatorname{RoPE}_{d_r};\ \operatorname{Hadamard}/\sqrt{d_I};\ Q_4\text{-block FP4 QDQ}$$"| C_QI
+    C_QR -->|"$$\begin{gathered} W_{Iq}^{\ell,(p)}\in\mathbb R^{(N_I^{(p)}d_I)\times R_q} \\\\ \operatorname{ColumnParallelFP8Linear}\!\left(W_{Iq}^{\ell,(p)}\right) \\\\ \operatorname{RoPE}_{d_r};\ \operatorname{Hadamard}/\sqrt{d_I} \\\\ Q_4\text{-block FP4 QDQ} \end{gathered}$$"| C_QI
     C_POS -->|"$$\operatorname{slice\_phase}(p_0:p_0+S)$$"| C_QI
-    C_HA -->|"$$\mathrm{FP32};\ \left(\operatorname{Linear}_{I,kv},\operatorname{Linear}_{I,z}\right),\ \text{each }D\to2d_I$$"| C_IRAW
-    C_IRAW -->|"$$\text{prefill previous-block/remainder snapshots or decode slot writes};\ \mathbf Z^{I,\mathrm{raw}}+\operatorname{APE}$$"| C_ISTATE
-    C_POS -->|"$$p_0=0:\ \operatorname{select\_prefill\_overlap/remainder};\quad p_0>0:\ \operatorname{select\_indexer\_decode\_slot}(p_0\bmod\rho_C)$$"| C_ISTATE
-    C_IRAW -->|"$$p_0=0:\ \operatorname{overlap}_{\rho_C};\ +\operatorname{APE}\text{ before feature softmax};\ \operatorname{pool};\ \mathrm{BF16};\ \operatorname{RMSNorm};\ \operatorname{RoPE};\ \operatorname{Hadamard};\ \mathrm{FP4\ QDQ};\ \operatorname{cache\_write}$$"| C_KI
-    C_ISTATE -->|"$$p_0>0:\ \text{updated (prior plus current) state};\ \operatorname{pool/norm/RoPE/Hadamard/FP4\ QDQ};\ \operatorname{cache\_write\ at\ completion}$$"| C_KI
+    C_HA -->|"$$\begin{gathered} \mathrm{BF16}\to\mathrm{FP32} \\\\ \left(\operatorname{Linear}_{I,kv},\operatorname{Linear}_{I,z}\right) \\\\ \text{each }D\to2d_I \end{gathered}$$"| C_IRAW
+    C_IRAW -->|"$$\begin{gathered} \text{prefill previous-block/remainder snapshots} \\\\ \text{or decode slot writes} \\\\ \mathbf Z^{I,\mathrm{raw}}+\operatorname{APE} \end{gathered}$$"| C_ISTATE
+    C_POS -->|"$$\begin{gathered} p_0=0:\ \operatorname{select\_prefill\_overlap/remainder} \\\\ p_0>0:\ \operatorname{select\_indexer\_decode\_slot}(p_0\bmod\rho_C) \end{gathered}$$"| C_ISTATE
+    C_IRAW -->|"$$\begin{gathered} p_0=0:\ \operatorname{overlap}_{\rho_C};\ +\operatorname{APE} \\\\ \operatorname{feature\_softmax};\ \operatorname{pool} \\\\ \mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm} \\\\ \operatorname{RoPE};\ \operatorname{Hadamard};\ \mathrm{FP4\ QDQ} \\\\ \operatorname{cache\_write} \end{gathered}$$"| C_KI
+    C_ISTATE -->|"$$\begin{gathered} p_0>0:\ \text{updated (prior plus current) state} \\\\ \operatorname{pool};\ \mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm} \\\\ \operatorname{RoPE};\ \operatorname{Hadamard};\ \mathrm{FP4\ QDQ} \\\\ \operatorname{cache\_write}\text{ at completion} \end{gathered}$$"| C_KI
     C_POS -->|"$$\operatorname{block\_start\_phase}_{\rho_C}$$"| C_KI
-    C_HA -->|"$$\operatorname{ColumnParallelLinear}_{\mathrm{BF16}}\!\left(W_{Iw}^{\ell,(p)}\in\mathbb R^{N_I^{(p)}\times D}\right)/\sqrt{d_I N_I}$$"| C_WI
-    C_QI -->|"$$\operatorname{einsum}\!\left(\mathbf Q^I,\mathcal K^I\right);\ \operatorname{ReLU};\ \sum_{N_I^{(p)}};\ \operatorname{AllReduce}_{P}$$"| C_ISCORE
-    C_KI -->|"$$\text{compressed index-key operand sliced as }\mathcal K^I_{\ell}[:B,:C_{\ell},:]$$"| C_ISCORE
+    C_HA -->|"$$\begin{gathered} W_{Iw}^{\ell,(p)}\in\mathbb R^{N_I^{(p)}\times D} \\\\ \operatorname{ColumnParallelLinear}_{\mathrm{BF16}}\!\left(W_{Iw}^{\ell,(p)}\right) \\\\ \text{output scale }1/\sqrt{d_I N_I} \end{gathered}$$"| C_WI
+    C_QI -->|"$$\begin{gathered} \operatorname{einsum}\!\left(\mathbf Q^I,\mathcal K^I\right);\ \operatorname{ReLU} \\\\ \sum_{N_I^{(p)}};\ \operatorname{AllReduce}_{P} \end{gathered}$$"| C_ISCORE
+    C_KI -->|"$$\begin{gathered} \text{compressed index-key operand} \\\\ \mathcal K^I_{\ell}[:B,:C_{\ell},:] \end{gathered}$$"| C_ISCORE
     C_WI -->|"$$\text{signed per-index-head weighting operand}$$"| C_ISCORE
-    C_ISCORE -->|"$$p_0=0:\ \operatorname{causal\_mask};\ \operatorname{TopK}_{\min(K_I,C_{\ell})};\ -1\text{ invalids};\quad p_0>0:\ \operatorname{TopK}_{\min(K_I,C_{\ell})}\ \text{over all completed candidates}$$"| C_IHIST
-    C_POS -->|"$$\begin{gathered} p_0=0:\ \text{causal prefix boundary and physical offset }S \\\\ p_0>0:\ \text{completed-history boundary and physical offset }W \end{gathered}$$"| C_IHIST
+    C_ISCORE -->|"$$\begin{gathered} p_0=0:\ \operatorname{causal\_mask};\ \operatorname{TopK}_{\min(K_I,C_{\ell})} \\\\ p_0=0:\ -1\text{ marks invalid entries} \\\\ p_0>0:\ \operatorname{TopK}_{\min(K_I,C_{\ell})} \\\\ p_0>0:\ \text{all completed candidates} \end{gathered}$$"| C_IHIST
+    C_POS -->|"$$\begin{gathered} p_0=0:\ \text{causal prefix boundary} \\\\ p_0=0:\ \text{physical offset }S \\\\ p_0>0:\ \text{completed-history boundary} \\\\ p_0>0:\ \text{physical offset }W \end{gathered}$$"| C_IHIST
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
     classDef cache fill:#fff4d6,stroke:#b7791f,color:#422006,stroke-width:1.6px;
     classDef index fill:#f3e8ff,stroke:#7e22ce,color:#2e1065,stroke-width:1.3px;
-    classDef output fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:1.7px;
     class C_HA,C_QR,C_POS input;
-    class C_CRAW,C_ZRAW,C_CVAL,C_CGATE,C_CNEW,C_QI,C_IRAW,C_WI,C_ISCORE data;
-    class C_CSTATE,C_CCACHE,C_ISTATE,C_KI cache;
+    class C_QI,C_IRAW,C_WI,C_ISCORE data;
+    class C_ISTATE,C_KI cache;
     class C_IHIST index;
-    class C_CEMIT output;
 ```
 
 Cross-diagram interfaces (semantic identity, not a copy or runtime edge):
@@ -506,29 +527,29 @@ flowchart TD
     H_POS["$$p_0\in\mathbb N,\quad S=1\ \mathrm{if}\ p_0>0$$"]
     H_CRAW["$$\mathbf C^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times d_h}\;[\mathrm{FP32}]$$"]
     H_ZRAW["$$\mathbf Z^{\mathrm{raw}}_{\ell}\in\mathbb R^{B\times S\times d_h}\;[\mathrm{FP32}]$$"]
-    H_CSTATE["$$\left(\mathcal S_{\ell}^{kv},\mathcal S_{\ell}^{z}\right)\in\mathbb R^{B_{\max}\times\rho_H\times d_h}\times\mathbb R^{B_{\max}\times\rho_H\times d_h}\;[\mathrm{FP32}]$$"]
-    H_CVAL["$$\mathbf C^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times\rho_H\times d_h}\;[\mathrm{FP32}]$$"]
-    H_CGATE["$$\mathbf Z^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times\rho_H\times d_h}\;[\mathrm{FP32}]$$"]
-    H_CNEW["$$\mathbf C^{\mathrm{pool}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{FP32}]$$"]
-    H_CEMIT["$$\mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h}\;[\mathrm{BF16}]$$"]
-    H_CCACHE["$$\mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:]\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_H\rfloor\times d_h}\;[\mathrm{BF16}]$$"]
-    H_IHIST["$$\mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times C_{\ell}}\;[\mathrm{INT32}]$$"]
+    H_CSTATE["$$\begin{gathered} \left(\mathcal S_{\ell}^{kv},\mathcal S_{\ell}^{z}\right) \\\\ \text{each in }\mathbb R^{B_{\max}\times\rho_H\times d_h}\;[\mathrm{FP32}] \end{gathered}$$"]
+    H_CVAL["$$\begin{gathered} \mathbf C^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times\rho_H\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    H_CGATE["$$\begin{gathered} \mathbf Z^{\mathrm{src}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times\rho_H\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    H_CNEW["$$\begin{gathered} \mathbf C^{\mathrm{pool}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h} \\\\ [\mathrm{FP32}] \end{gathered}$$"]
+    H_CEMIT["$$\begin{gathered} \mathbf C^{\mathrm{emit}}_{\ell}\in\mathbb R^{B\times C_{\ell}^{\mathrm{new}}\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    H_CCACHE["$$\begin{gathered} \mathcal K^{\mathrm{comp}}_{\ell}\equiv\mathcal K^{\mathrm{layer}}_{\ell}[:,W:,:] \\\\ \mathcal K^{\mathrm{comp}}_{\ell}\in\mathbb R^{B_{\max}\times\lfloor S_{\max}/\rho_H\rfloor\times d_h} \\\\ [\mathrm{BF16}] \end{gathered}$$"]
+    H_IHIST["$$\begin{gathered} \mathbf I^{\mathrm{hist}}_{\ell}\in\mathbb Z^{B\times S\times C_{\ell}} \\\\ [\mathrm{INT32}] \end{gathered}$$"]
 
-    H_HA -->|"$$\mathrm{FP32};\ \operatorname{Linear}\!\left(W_{c,kv}^{\ell}\in\mathbb R^{d_h\times D}\right)$$"| H_CRAW
-    H_HA -->|"$$\mathrm{FP32};\ \operatorname{Linear}\!\left(W_{c,z}^{\ell}\in\mathbb R^{d_h\times D}\right)$$"| H_ZRAW
-    H_CRAW -->|"$$p_0=0:\ \operatorname{unflatten/group}_{\rho_H}\ \text{for complete current-call blocks}$$"| H_CVAL
-    H_ZRAW -->|"$$p_0=0:\ +\operatorname{APE}_{\rho_H};\ \operatorname{unflatten/group}_{\rho_H}$$"| H_CGATE
-    H_CSTATE -->|"$$p_0>0:\ \text{updated (prior plus current) incomplete-value operand}$$"| H_CVAL
-    H_CSTATE -->|"$$p_0>0:\ \text{updated incomplete-gate operand}$$"| H_CGATE
-    H_CRAW -->|"$$\text{prefill remainder snapshot or decode slot write}$$"| H_CSTATE
-    H_ZRAW -->|"$$+\operatorname{APE}\text{ at the stored token slot};\ \text{prefill/decode score-state write}$$"| H_CSTATE
-    H_POS -->|"$$p_0=0:\ \operatorname{select\_prefill\_remainder};\quad p_0>0:\ \operatorname{select\_decode\_slot}(p_0\bmod\rho_H)$$"| H_CSTATE
-    H_CVAL -->|"$$\operatorname{softmax}_{\rho_H}\!\left(\mathbf Z^{\mathrm{src}}_{\ell}\right)\odot\mathbf C^{\mathrm{src}}_{\ell};\ \sum_{\rho_H}$$"| H_CNEW
+    H_HA -->|"$$\begin{gathered} \mathrm{BF16}\to\mathrm{FP32} \\\\ \operatorname{Linear}\!\left(W_{c,kv}^{\ell}\in\mathbb R^{d_h\times D}\right) \end{gathered}$$"| H_CRAW
+    H_HA -->|"$$\begin{gathered} \mathrm{BF16}\to\mathrm{FP32} \\\\ \operatorname{Linear}\!\left(W_{c,z}^{\ell}\in\mathbb R^{d_h\times D}\right) \end{gathered}$$"| H_ZRAW
+    H_CRAW -->|"$$\begin{gathered} p_0=0:\ \operatorname{unflatten/group}_{\rho_H} \\\\ \text{complete current-call blocks} \end{gathered}$$"| H_CVAL
+    H_ZRAW -->|"$$\begin{gathered} p_0=0:\ +\operatorname{APE}_{\rho_H} \\\\ \operatorname{unflatten/group}_{\rho_H} \end{gathered}$$"| H_CGATE
+    H_CSTATE -->|"$$\begin{gathered} p_0>0:\ \text{updated state} \\\\ \text{prior-plus-current incomplete-value operand} \end{gathered}$$"| H_CVAL
+    H_CSTATE -->|"$$\begin{gathered} p_0>0:\ \text{updated state} \\\\ \text{incomplete-gate operand} \end{gathered}$$"| H_CGATE
+    H_CRAW -->|"$$\begin{gathered} \text{prefill remainder snapshot} \\\\ \text{or decode slot write} \end{gathered}$$"| H_CSTATE
+    H_ZRAW -->|"$$\begin{gathered} +\operatorname{APE}\text{ at the stored token slot} \\\\ \text{prefill/decode score-state write} \end{gathered}$$"| H_CSTATE
+    H_POS -->|"$$\begin{gathered} p_0=0:\ \operatorname{select\_prefill\_remainder} \\\\ p_0>0:\ \operatorname{select\_decode\_slot}(p_0\bmod\rho_H) \end{gathered}$$"| H_CSTATE
+    H_CVAL -->|"$$\begin{gathered} \operatorname{softmax}_{\rho_H}\!\left(\mathbf Z^{\mathrm{src}}_{\ell}\right) \\\\ \text{feature-wise multiply by }\mathbf C^{\mathrm{src}}_{\ell} \\\\ \operatorname{reduce\_sum}_{\rho_H} \end{gathered}$$"| H_CNEW
     H_CGATE -->|"$$\text{feature-wise gate operand for the weighted reduction}$$"| H_CNEW
-    H_CNEW -->|"$$\mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm}_{d_h};\ \operatorname{RoPE}_{d_r};\ Q_{KV}\text{-block FP8 QDQ on }d_n$$"| H_CEMIT
-    H_POS -->|"$$p_0=0:\ C_{\ell}^{\mathrm{new}}=\lfloor S/\rho_H\rfloor;\quad p_0>0:\ C_{\ell}^{\mathrm{new}}=\mathbf1[(p_0+1)\bmod\rho_H=0];\ \operatorname{block\_start\_phase}_{\rho_H}$$"| H_CEMIT
+    H_CNEW -->|"$$\begin{gathered} \mathrm{FP32}\to\mathrm{BF16};\ \operatorname{RMSNorm}_{d_h} \\\\ \operatorname{RoPE}_{d_r};\ Q_{KV}\text{-block FP8 QDQ on }d_n \end{gathered}$$"| H_CEMIT
+    H_POS -->|"$$\begin{gathered} p_0=0:\ C_{\ell}^{\mathrm{new}}=\lfloor S/\rho_H\rfloor \\\\ p_0>0:\ C_{\ell}^{\mathrm{new}}=\mathbf1[(p_0+1)\bmod\rho_H=0] \\\\ \operatorname{block\_start\_phase}_{\rho_H} \end{gathered}$$"| H_CEMIT
     H_CEMIT -->|"$$\operatorname{cache\_write}\text{ into the compressed alias view}$$"| H_CCACHE
-    H_POS -->|"$$\operatorname{enumerate\_completed}_{\rho_H}(p_0,S);\ \operatorname{offset}_{p_0=0:S,\ p_0>0:W};\ -1\text{ masks future or not-yet-completed prefill entries}$$"| H_IHIST
+    H_POS -->|"$$\begin{gathered} \operatorname{enumerate\_completed}_{\rho_H}(p_0,S) \\\\ p_0=0:\ \text{causal prefix boundary and physical offset }S \\\\ p_0>0:\ \text{completed-history boundary and physical offset }W \\\\ p_0=0:\ -1\text{ masks future or not-yet-completed entries} \end{gathered}$$"| H_IHIST
 
     classDef input fill:#e8f3ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
     classDef data fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.2px;
@@ -542,7 +563,7 @@ flowchart TD
     class H_IHIST index;
 ```
 
-Cross-diagram interfaces (semantic identity, not a copy or runtime edge):
+Cross-diagram interfaces (ditto):
 $\texttt{H\_CEMIT}\equiv\texttt{A\_CEMIT}$,
 $\texttt{H\_CCACHE}\equiv\texttt{A\_CCACHE}$, and
 $\texttt{H\_IHIST}\equiv\texttt{A\_IHIST}$.
@@ -556,7 +577,7 @@ flowchart TD
     MF_XA["$$\mathbf X_{\ell}^{a}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
     MF_XFFP["$$\mathbf X_{\ell,\mathrm{flat}}^{f}\in\mathbb R^{B\times S\times D_{\mathrm{hc}}}\;[\mathrm{FP32}]$$"]
     MF_MUF["$$\boldsymbol{\mu}^{f}_{\ell}\in\mathbb R^{B\times S\times D_{\mu}}\;[\mathrm{FP32}]$$"]
-    MF_MAPF["$$\left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell},\mathbf B^{f}_{\ell}\right)\in\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M}\times\mathbb R^{B\times S\times M\times M}\;[\mathrm{FP32}]$$"]
+    MF_MAPF["$$\begin{gathered} \left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell},\mathbf B^{f}_{\ell}\right)\;[\mathrm{FP32}] \\\\ \left(\mathbf A^{f}_{\ell},\mathbf C^{f}_{\ell}\right)\in\left(\mathbb R^{B\times S\times M}\right)^2 \\\\ \mathbf B^{f}_{\ell}\in\mathbb R^{B\times S\times M\times M} \end{gathered}$$"]
     MF_UF["$$\mathbf U^{f}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     MF_HF["$$\widehat{\mathbf H}^{f}_{\ell}\in\mathbb R^{B\times S\times D}\;[\mathrm{BF16}]$$"]
     MF_AFF["$$\mathbf S_{\ell}\in\mathbb R^{N\times E}\;[\mathrm{FP32}]$$"]
@@ -568,24 +589,24 @@ flowchart TD
     MF_XNEXT["$$\mathbf X_{\ell+1}\in\mathbb R^{B\times S\times M\times D}\;[\mathrm{BF16}]$$"]
 
     MF_XA -->|"$$\operatorname{flatten}_{M,D};\ \mathrm{BF16}\to\mathrm{FP32}$$"| MF_XFFP
-    MF_XFFP -->|"$$\operatorname{Linear}\!\left(W_{\mathrm{hc},f}^{\ell}\in\mathbb R^{D_{\mu}\times D_{\mathrm{hc}}}\right)\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right)$$"| MF_MUF
-    MF_MUF -->|"$$\operatorname{hc\_split\_sinkhorn}_{I_{\mathrm{SK}}}:\ \sigma,\ 2\sigma,\ \text{row-softmax and alternating normalizations}$$"| MF_MAPF
-    MF_XFFP -->|"$$\operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D];\ \mathbf U^f_{\ell}=\sum_{j=0}^{M-1}A^f_{\ell,j}\mathbf X^f_{\ell,\mathrm{FP32},j};\ \mathrm{BF16}$$"| MF_UF
+    MF_XFFP -->|"$$\begin{gathered} \operatorname{Linear}\!\left(W_{\mathrm{hc},f}^{\ell}\in\mathbb R^{D_{\mu}\times D_{\mathrm{hc}}}\right) \\\\ {}\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right) \end{gathered}$$"| MF_MUF
+    MF_MUF -->|"$$\begin{gathered} \operatorname{hc\_split\_sinkhorn}_{I_{\mathrm{SK}}}:\ \sigma,\ 2\sigma \\\\ \text{row-softmax and alternating normalizations} \end{gathered}$$"| MF_MAPF
+    MF_XFFP -->|"$$\begin{gathered} \operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D] \\\\ \mathbf U^f_{\ell}=\sum_{j=0}^{M-1}A^f_{\ell,j}\mathbf X^f_{\ell,\mathrm{FP32},j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MF_UF
     MF_MAPF -->|"$$\mathbf A^f_{\ell}\ \text{is the reduction operand}$$"| MF_UF
     MF_UF -->|"$$\operatorname{RMSNorm}_{\gamma^{f}_{\ell},\epsilon_n};\ \text{FP32 statistics, BF16 output}$$"| MF_HF
 
-    MF_HF -->|"$$\operatorname{view}[B,S,D]\to[N,D];\ \operatorname{Linear}_{\mathrm{FP32}}\!\left(W_g^{\ell}\in\mathbb R^{E\times D}\right);\ \mathbf S_{\ell}=\sqrt{\operatorname{softplus}(\cdot)}$$"| MF_AFF
-    MF_TOK -->|"$$\ell\lt L_H:\ \operatorname{flatten};\ \operatorname{lookup}\!\left(\mathrm{tid2eid}^{\ell}\in\mathbb Z^{V\times E_a}\right)$$"| MF_RID
-    MF_AFF -->|"$$\ell\geq L_H:\ \operatorname{TopK}_{E_a}\!\left(\mathbf S_{\ell}+\mathbf b_{\ell}^{\mathrm{select}}\right)$$"| MF_RID
-    MF_AFF -->|"$$\operatorname{gather}_{\mathbf R_{\ell}}\!\left(\mathbf S_{\ell}\right);\ \operatorname{normalize}_{E_a};\ \times\alpha_r$$"| MF_RW
+    MF_HF -->|"$$\begin{gathered} \operatorname{view}[B,S,D]\to[N,D] \\\\ \operatorname{Linear}_{\mathrm{FP32}}\!\left(W_g^{\ell}\in\mathbb R^{E\times D}\right) \\\\ \mathbf S_{\ell}=\sqrt{\operatorname{softplus}(\cdot)} \end{gathered}$$"| MF_AFF
+    MF_TOK -->|"$$\begin{gathered} \ell\lt L_H:\ \operatorname{flatten} \\\\ \operatorname{lookup}\!\left(\mathrm{tid2eid}^{\ell}\in\mathbb Z^{V\times E_a}\right) \end{gathered}$$"| MF_RID
+    MF_AFF -->|"$$\begin{gathered} \ell\geq L_H \\\\ \operatorname{TopK}_{E_a}\!\left(\mathbf S_{\ell}+\mathbf b_{\ell}^{\mathrm{select}}\right) \end{gathered}$$"| MF_RID
+    MF_AFF -->|"$$\begin{gathered} \operatorname{gather}_{\mathbf R_{\ell}}\!\left(\mathbf S_{\ell}\right) \\\\ \operatorname{normalize}_{E_a};\ \times\alpha_r \end{gathered}$$"| MF_RW
     MF_RID -->|"$$\text{selected expert-ID operand}$$"| MF_RW
-    MF_HF -->|"$$\operatorname{view}[B,S,D]\to[N,D];\ \operatorname{dispatch\_local}_{E/P};\ \mathrm{FP8\ activation}\times\mathrm{FP4\ weights}\ W_{1,e},W_{3,e},W_{2,e};\ \operatorname{clamped\ SwiGLU};\ \operatorname{scatter\_add}_{\mathrm{FP32}};\ \operatorname{AllReduce}_{P}$$"| MF_YR
+    MF_HF -->|"$$\begin{gathered} \operatorname{view}[B,S,D]\to[N,D];\ \operatorname{dispatch\_local}_{E/P} \\\\ \mathrm{FP8\ activation}\times\mathrm{FP4\ weights}\ W_{1,e},W_{3,e},W_{2,e};\ \operatorname{clamped\ SwiGLU} \\\\ \operatorname{scatter\_add}_{\mathrm{FP32}};\ \operatorname{AllReduce}_{P} \end{gathered}$$"| MF_YR
     MF_RID -->|"$$\text{token/expert and top-slot addresses}$$"| MF_YR
     MF_RW -->|"$$\boldsymbol{\pi}_{\ell}\text{ multiplies the FP32 SwiGLU activation before }W_{2,e}$$"| MF_YR
-    MF_HF -->|"$$\operatorname{view}[B,S,D]\to[N,D];\ E_s=1:\ \operatorname{FP8Expert}\!\left(W_{1,s},W_{3,s}\in\mathbb R^{D_e\times D},\ W_{2,s}\in\mathbb R^{D\times D_e}\right);\ \operatorname{clamped\ SwiGLU}$$"| MF_YS
-    MF_YR -->|"$$\operatorname{reshape}[N,D]\to[B,S,D];\ \operatorname{add};\ \mathrm{FP32}\to\mathrm{BF16}$$"| MF_YF
+    MF_HF -->|"$$\begin{gathered} \operatorname{view}[B,S,D]\to[N,D];\ E_s=1 \\\\ W_{1,s},W_{3,s}\in\mathbb R^{D_e\times D};\ W_{2,s}\in\mathbb R^{D\times D_e} \\\\ \operatorname{FP8Expert}\!\left(W_{1,s},W_{3,s},W_{2,s}\right) \\\\ \operatorname{clamped\ SwiGLU} \end{gathered}$$"| MF_YS
+    MF_YR -->|"$$\begin{gathered} \operatorname{reshape}[N,D]\to[B,S,D] \\\\ \operatorname{add};\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MF_YF
     MF_YS -->|"$$\text{replicated shared-expert operand}$$"| MF_YF
-    MF_YF -->|"$$\mathbf X_{\ell+1,k}=C_{\ell,k}^{f}\mathbf Y_{\ell}^{f}+\sum_{j=0}^{M-1}B_{\ell,j,k}^{f}\mathbf X_{\ell,j}^{a};\ \mathrm{FP32}\to\mathrm{BF16}$$"| MF_XNEXT
+    MF_YF -->|"$$\begin{gathered} \mathbf X_{\ell+1,k}=C_{\ell,k}^{f}\mathbf Y_{\ell}^{f}+\sum_{j=0}^{M-1}B_{\ell,j,k}^{f}\mathbf X_{\ell,j}^{a} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MF_XNEXT
     MF_XA -->|"$$\text{saved BF16 residual operand (alias, not copy)}$$"| MF_XNEXT
     MF_MAPF -->|"$$\left(\mathbf C_{\ell}^{f},\mathbf B_{\ell}^{f}\right)\ \text{are post-mix operands}$$"| MF_XNEXT
 
@@ -619,15 +640,15 @@ flowchart TD
     RETMAIN["$$\left(\mathbf y_{\mathrm{main}},\mathbf Z_{\mathrm{main}},\mathbf H_{\mathcal T}\right)$$"]
 
     XFINAL -->|"$$\operatorname{flatten}_{M,D};\ \mathrm{BF16}\to\mathrm{FP32}$$"| XHFP
-    XHFP -->|"$$\operatorname{Linear}\!\left(W_{\mathrm{hc},h}\in\mathbb R^{M\times D_{\mathrm{hc}}}\right)\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right)$$"| MUH
+    XHFP -->|"$$\begin{gathered} \operatorname{Linear}\!\left(W_{\mathrm{hc},h}\in\mathbb R^{M\times D_{\mathrm{hc}}}\right) \\\\ {}\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right) \end{gathered}$$"| MUH
     MUH -->|"$$\mathbf A^h=\sigma(\boldsymbol{\mu}^{h}\alpha_h+\mathbf b_h)+\epsilon_{\mathrm{hc}}$$"| AH
-    XHFP -->|"$$\operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D];\ \mathbf H_{\mathrm{final}}=\sum_{j=0}^{M-1}A_j^{h}\mathbf X_{L,\mathrm{FP32},j};\ \mathrm{BF16}$$"| HFIN
+    XHFP -->|"$$\begin{gathered} \operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D] \\\\ \mathbf H_{\mathrm{final}}=\sum_{j=0}^{M-1}A_j^{h}\mathbf X_{L,\mathrm{FP32},j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| HFIN
     AH -->|"$$\text{head-reduction operand; no Sinkhorn/post/residual map}$$"| HFIN
     HFIN -->|"$$\operatorname{RMSNorm}_{\gamma_{\mathrm{final}},\epsilon_n}$$"| HN
     HN -->|"$$\operatorname{select}_{S-1}\ \text{because full\_logits is false}$$"| HLAST
-    HLAST -->|"$$\operatorname{Linear}_{\mathrm{FP32}}\!\left(W_{\mathrm{head}}^{(p)}\in\mathbb R^{(V/P)\times D}\right)$$"| ZLOC
+    HLAST -->|"$$\begin{gathered} \operatorname{Linear}_{\mathrm{FP32}} \\\\ W_{\mathrm{head}}^{(p)}\in\mathbb R^{(V/P)\times D} \end{gathered}$$"| ZLOC
     ZLOC -->|"$$\operatorname{AllGather}_{P};\ \operatorname{concat}_{V}$$"| ZMAIN
-    ZMAIN -->|"$$\tau=0:\operatorname{argmax};\quad \tau\neq0:\operatorname{softmax}_{\mathrm{FP32}}\!\left(\mathbf Z/\max(\tau,10^{-5})\right)\ \text{then exponential-race sample per rank; no ID broadcast}$$"| YMAIN
+    ZMAIN -->|"$$\begin{gathered} \tau=0:\ \operatorname{argmax} \\\\ \tau\neq0:\ \operatorname{softmax}_{\mathrm{FP32}}\!\left(\mathbf Z/\max(\tau,10^{-5})\right) \\\\ \tau\neq0:\ \text{exponential-race sample per rank; no ID broadcast} \end{gathered}$$"| YMAIN
     YMAIN -->|"$$\text{return component }1$$"| RETMAIN
     ZMAIN -->|"$$\text{return component }2$$"| RETMAIN
     TAP -->|"$$\text{return component }3$$"| RETMAIN
@@ -642,8 +663,10 @@ flowchart TD
 
 ### Separate DSpark forward_spec API
 
-DSpark block's internal dataflow; its three boundary inputs are redeclared so the Mermaid block renders independently.
+DSpark block's internal dataflow.
 `forward_spec` is separately callable, not an unconditional tail of `Transformer.forward`.
+
+This is not a part of the original paper and appears to be a state-of-the-art frontier ongoing research work, so I'll skip here.
 
 ```mermaid
 %%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 24, "rankSpacing": 36}}}%%
@@ -652,21 +675,21 @@ flowchart TD
     TAP["$$\mathbf H_{\mathcal T}\in\mathbb R^{B\times S\times(|\mathcal T|D)}\;[\mathrm{BF16}]$$"]
     YMAIN["$$\mathbf y_{\mathrm{main}}\in\mathbb N^{B}\;[\mathrm{INT64}]$$"]
 
-    DSID["$$\mathbf T_D=[\mathbf y_{\mathrm{main}},t_{\mathrm{noise}},\ldots,t_{\mathrm{noise}}]\in\mathbb N^{B\times K_D}\;[\mathrm{INT64}]$$"]
+    DSID["$$\begin{gathered} \mathbf T_D=[\mathbf y_{\mathrm{main}},t_{\mathrm{noise}},\ldots,t_{\mathrm{noise}}] \\\\ \mathbf T_D\in\mathbb N^{B\times K_D}\;[\mathrm{INT64}] \end{gathered}$$"]
     MAINX["$$\mathbf H_D^{\mathrm{main}}\in\mathbb R^{B\times S_m\times D}\;[\mathrm{BF16}]$$"]
     DX0["$$\mathbf X^D_0\in\mathbb R^{B\times K_D\times M\times D}\;[\mathrm{BF16}]$$"]
-    DKCACHE["$$\left\{\mathcal K^{D,\mathrm{main}}_j\in\mathbb R^{B_{\max}\times W\times d_h}\;[\mathrm{BF16}]\right\}_{j=0}^{L_D-1}$$"]
+    DKCACHE["$$\begin{gathered} \left\{\mathcal K^{D,\mathrm{main}}_j\right\}_{j=0}^{L_D-1} \\\\ \mathcal K^{D,\mathrm{main}}_j\in\mathbb R^{B_{\max}\times W\times d_h}\;[\mathrm{BF16}] \end{gathered}$$"]
     NULLRET["$$\varnothing\quad\text{(forward\_spec prefill return)}$$"]
 
-    TAP -.->|"$$\operatorname{FP8Linear}\!\left(W_D^{\mathrm{main}}\in\mathbb R^{D\times(|\mathcal T|D)}\right);\ \operatorname{RMSNorm}$$"| MAINX
-    YMAIN -.->|"$$\operatorname{fill}_{K_D}(t_{\mathrm{noise}});\ \mathbf T_D[:,0]=\mathbf y_{\mathrm{main}}$$"| DSID
-    DSID -->|"$$\operatorname{shared\ EmbedShard}_{P};\ \operatorname{AllReduce}_{P};\ \operatorname{repeat}_{M}$$"| DX0
-    MAINX -->|"$$\forall j\lt L_D:\ \operatorname{FP8Linear}(W_{kv}^{D,j});\ \operatorname{RMSNorm};\ \operatorname{RoPE}_{d_r,\theta_{\mathrm{local}}};\ \mathrm{FP8\ QDQ};\ \operatorname{ring\_write}$$"| DKCACHE
+    TAP -.->|"$$\begin{gathered} \operatorname{FP8Linear}\!\left(W_D^{\mathrm{main}}\in\mathbb R^{D\times(|\mathcal T|D)}\right) \\\\ \operatorname{RMSNorm} \end{gathered}$$"| MAINX
+    YMAIN -.->|"$$\begin{gathered} \operatorname{fill}_{K_D}(t_{\mathrm{noise}}) \\\\ \mathbf T_D[:,0]=\mathbf y_{\mathrm{main}} \end{gathered}$$"| DSID
+    DSID -->|"$$\begin{gathered} \operatorname{shared\ EmbedShard}_{P} \\\\ \operatorname{AllReduce}_{P};\ \operatorname{repeat}_{M} \end{gathered}$$"| DX0
+    MAINX -->|"$$\begin{gathered} \forall j\lt L_D:\ \operatorname{FP8Linear}(W_{kv}^{D,j}) \\\\ \operatorname{RMSNorm};\ \operatorname{RoPE}_{d_r,\theta_{\mathrm{local}}} \\\\ \mathrm{FP8\ QDQ};\ \operatorname{ring\_write} \end{gathered}$$"| DKCACHE
     POS -->|"$$\operatorname{main\ phase\ slice}(p_0:p_0+S_m)$$"| DKCACHE
     DX0 -->|"$$p_0=0:\ \text{all DSpark blocks bypass mHC, draft attention, and MoE}$$"| NULLRET
     DKCACHE -->|"$$p_0=0:\ \text{cache side effect only}$$"| NULLRET
 
-    DXJ["$$\mathbf X^D_j\in\mathbb R^{B\times K_D\times M\times D}\;[\mathrm{BF16}],\quad 0\leq j\lt L_D$$"]
+    DXJ["$$\begin{gathered} \mathbf X^D_j\in\mathbb R^{B\times K_D\times M\times D}\;[\mathrm{BF16}] \\\\ 0\leq j\lt L_D \end{gathered}$$"]
     DUA["$$\widehat{\mathbf H}^{D,a}_j\in\mathbb R^{B\times K_D\times D}\;[\mathrm{BF16}]$$"]
     DQ["$$\mathbf Q^{D,(p)}_j\in\mathbb R^{B\times K_D\times N_h^{(p)}\times d_h}\;[\mathrm{BF16}]$$"]
     DKV["$$\mathbf{KV}^{D,\mathrm{draft}}_j\in\mathbb R^{B\times K_D\times d_h}\;[\mathrm{BF16}]$$"]
@@ -681,22 +704,22 @@ flowchart TD
     DXEND["$$\mathbf X^D_{L_D}\in\mathbb R^{B\times K_D\times M\times D}\;[\mathrm{BF16}]$$"]
 
     DX0 -->|"$$p_0>0:\ j=0$$"| DXJ
-    DXJ -->|"$$\operatorname{mHCpre}^{a}_{j};\ \operatorname{RMSNorm}\ \text{with the same FP32 map generation as the main block}$$"| DUA
-    DUA -->|"$$\operatorname{FP8Linear}_{q,a};\ \operatorname{RMSNorm}_{R_q};\ \operatorname{FP8Linear}_{q,b};\ \operatorname{head\ RMS}^{-1}_{\mathrm{BF16}};\ \operatorname{RoPE}_{d_r}\text{ at }p_0+S_m,\ldots,p_0+S_m+K_D-1$$"| DQ
+    DXJ -->|"$$\begin{gathered} \text{same FP32 map generation as the main block} \\\\ \operatorname{mHCpre}^{a}_{j} \\\\ \operatorname{RMSNorm} \end{gathered}$$"| DUA
+    DUA -->|"$$\begin{gathered} \operatorname{FP8Linear}_{q,a};\ \operatorname{RMSNorm}_{R_q} \\\\ \operatorname{FP8Linear}_{q,b};\ \operatorname{head\ RMS}^{-1}_{\mathrm{BF16}} \\\\ \operatorname{RoPE}_{d_r}\text{ at }p_0+S_m,\ldots,p_0+S_m+K_D-1 \end{gathered}$$"| DQ
     POS -->|"$$\operatorname{draft\ phase\ slice}(p_0+S_m:p_0+S_m+K_D)$$"| DQ
-    DUA -->|"$$\operatorname{FP8Linear}_{kv};\ \operatorname{RMSNorm};\ \operatorname{RoPE}_{d_r};\ \mathrm{FP8\ QDQ}$$"| DKV
+    DUA -->|"$$\begin{gathered} \operatorname{FP8Linear}_{kv};\ \operatorname{RMSNorm} \\\\ \operatorname{RoPE}_{d_r};\ \mathrm{FP8\ QDQ} \end{gathered}$$"| DKV
     POS -->|"$$\operatorname{draft\ phase\ slice}(p_0+S_m:p_0+S_m+K_D)$$"| DKV
     DKCACHE -->|"$$\operatorname{concat}_{1}\ \text{with current draft KV}$$"| DBANK
     DKV -->|"$$\operatorname{concat}_{1}\ \text{after the }W\text{-slot main ring}$$"| DBANK
-    POS -->|"$$[0,\ldots,\min(W,p_0+1)-1]\ \Vert\ [W,\ldots,W+K_D-1]\ \text{for every draft query}$$"| DI
-    DQ -->|"$$\operatorname{sparse\_attn}\!\left(\mathcal K^D_j,\mathbf I^D_j,\mathbf z_j^{\mathrm{sink}}\right);\ \text{all }K_D\text{ draft entries are mutually visible}$$"| DO
+    POS -->|"$$\begin{gathered} [0,\ldots,\min(W,p_0+1)-1] \\\\ {}\Vert\ [W,\ldots,W+K_D-1]\ \text{for every draft query} \end{gathered}$$"| DI
+    DQ -->|"$$\begin{gathered} \operatorname{sparse\_attn}\!\left(\mathcal K^D_j,\mathbf I^D_j,\mathbf z_j^{\mathrm{sink}}\right) \\\\ \text{all }K_D\text{ draft entries are mutually visible} \end{gathered}$$"| DO
     DBANK -->|"$$\text{shared key/value operand}$$"| DO
     DI -->|"$$\text{gather-address operand}$$"| DO
-    DO -->|"$$\operatorname{RoPE}^{-1}_{d_r};\ \operatorname{grouped}\ W_{o,a}^{D,j};\ \operatorname{RowParallelFP8Linear}\ W_{o,b}^{D,j};\ \operatorname{AllReduce}_{P}$$"| DYA
+    DO -->|"$$\begin{gathered} \operatorname{RoPE}^{-1}_{d_r};\ \operatorname{grouped}\ W_{o,a}^{D,j} \\\\ \operatorname{RowParallelFP8Linear}\ W_{o,b}^{D,j} \\\\ \operatorname{AllReduce}_{P} \end{gathered}$$"| DYA
     DXJ -->|"$$\operatorname{mHCpost}^{a}_{j}\!\left(\mathbf Y^{D,a}_j,\mathbf X^D_j\right)$$"| DXA
     DYA -->|"$$\text{attention-result operand}$$"| DXA
     DXA -->|"$$\operatorname{mHCpre}^{f}_{j};\ \operatorname{RMSNorm}$$"| DUF
-    DUF -->|"$$\operatorname{DeepSeekMoE}_{E,E_a,E_s,D_e}\ \text{with learned routing};\ \operatorname{AllReduce}_{P}$$"| DYF
+    DUF -->|"$$\begin{gathered} \operatorname{DeepSeekMoE}_{E,E_a,E_s,D_e}\ \text{with learned routing} \\\\ \operatorname{AllReduce}_{P} \end{gathered}$$"| DYF
     DXA -->|"$$\operatorname{mHCpost}^{f}_{j}\!\left(\mathbf Y^{D,f}_j,\mathbf X^{D,a}_j\right)$$"| DXNEXT
     DYF -->|"$$\text{MoE-result operand}$$"| DXNEXT
     DXNEXT -->|"$$j+1\lt L_D:\ \text{next DSpark stage}$$"| DXJ
@@ -704,24 +727,24 @@ flowchart TD
 
     DH["$$\mathbf H_D\in\mathbb R^{B\times K_D\times D}\;[\mathrm{BF16}]$$"]
     ZDBASE["$$\mathbf Z_D^{\mathrm{base}}\in\mathbb R^{B\times K_D\times V}\;[\mathrm{FP32}]$$"]
-    DPREFIX["$$\mathbf d_{0:i}\in\mathbb N^{B\times(i+1)}\;[\mathrm{INT64}],\quad \mathbf d_0=\mathbf y_{\mathrm{main}}$$"]
+    DPREFIX["$$\begin{gathered} \mathbf d_{0:i}\in\mathbb N^{B\times(i+1)}\;[\mathrm{INT64}] \\\\ \mathbf d_0=\mathbf y_{\mathrm{main}} \end{gathered}$$"]
     MEMB["$$\mathbf E_D^M\in\mathbb R^{B\times K_D\times R_M}\;[\mathrm{BF16}]$$"]
-    MBIAS["$$\mathbf Z_{D,i}^M\in\mathbb R^{B\times V}\;[\mathrm{FP32}],\quad 0\leq i\lt K_D$$"]
-    ZD["$$\mathbf Z_D=\mathbf Z_D^{\mathrm{base}}+\mathbf Z_D^M\in\mathbb R^{B\times K_D\times V}\;[\mathrm{FP32}]$$"]
+    MBIAS["$$\begin{gathered} \mathbf Z_{D,i}^M\in\mathbb R^{B\times V}\;[\mathrm{FP32}] \\\\ 0\leq i\lt K_D \end{gathered}$$"]
+    ZD["$$\begin{gathered} \mathbf Z_D=\mathbf Z_D^{\mathrm{base}}+\mathbf Z_D^M \\\\ \mathbf Z_D\in\mathbb R^{B\times K_D\times V}\;[\mathrm{FP32}] \end{gathered}$$"]
     DOUT["$$\mathbf y_D=[\mathbf d_0,\ldots,\mathbf d_{K_D}]\in\mathbb N^{B\times(K_D+1)}\;[\mathrm{INT64}]$$"]
     CONF["$$\mathbf c_D\in\mathbb R^{B\times K_D}\;[\mathrm{FP32,\ raw}]$$"]
     RETSPEC["$$\left(\mathbf y_D,\mathbf Z_D,\mathbf c_D\right)$$"]
 
     DXEND -->|"$$\operatorname{mHChead};\ \mathrm{FP32}\to\mathrm{BF16}$$"| DH
-    DH -->|"$$\operatorname{RMSNorm};\ \operatorname{shared\ ParallelHead}_{P}\!\left(W_{\mathrm{head}}^{(p)}\right)\ \text{with full logits};\ \operatorname{AllGather}_{P}$$"| ZDBASE
+    DH -->|"$$\begin{gathered} \operatorname{RMSNorm} \\\\ \operatorname{shared\ ParallelHead}_{P}\!\left(W_{\mathrm{head}}^{(p)}\right)\ \text{with full logits} \\\\ \operatorname{AllGather}_{P} \end{gathered}$$"| ZDBASE
     YMAIN -->|"$$\mathbf d_0=\mathbf y_{\mathrm{main}}$$"| DPREFIX
-    DPREFIX -->|"$$\forall i\lt K_D:\ \operatorname{MarkovEmbedShard}_{P}\!\left(W_{M,1}^{(p)}\in\mathbb R^{(V/P)\times R_M}\right);\ \operatorname{AllReduce}_{P}$$"| MEMB
-    MEMB -->|"$$\operatorname{select}_{i};\ \operatorname{MarkovHeadShard}_{P}\!\left(W_{M,2}^{(p)}\in\mathbb R^{(V/P)\times R_M}\right);\ \operatorname{AllGather}_{P}$$"| MBIAS
-    ZDBASE -->|"$$\mathbf Z_D\leftarrow\mathbf Z_D^{\mathrm{base}}\ \text{as the same mutable tensor before sequential position updates}$$"| ZD
-    MBIAS -->|"$$\operatorname{add\_inplace}\ \mathbf Z_D[:,i,:]\mathrel{+}=\mathbf Z_{D,i}^M\ \text{before sampling step }i$$"| ZD
-    ZD -->|"$$\forall i\lt K_D:\ \tau=0\Rightarrow\arg\max;\ \tau\neq0\Rightarrow\operatorname{softmax}\!\left(\mathbf Z_{D,:,i,:}/\max(\tau,10^{-5})\right)\ \text{then exponential race per rank; no ID broadcast}$$"| DOUT
+    DPREFIX -->|"$$\begin{gathered} \forall i\lt K_D \\\\ \operatorname{MarkovEmbedShard}_{P}\!\left(W_{M,1}^{(p)}\in\mathbb R^{(V/P)\times R_M}\right) \\\\ \operatorname{AllReduce}_{P} \end{gathered}$$"| MEMB
+    MEMB -->|"$$\begin{gathered} \operatorname{select}_{i} \\\\ \operatorname{MarkovHeadShard}_{P}\!\left(W_{M,2}^{(p)}\in\mathbb R^{(V/P)\times R_M}\right) \\\\ \operatorname{AllGather}_{P} \end{gathered}$$"| MBIAS
+    ZDBASE -->|"$$\begin{gathered} \mathbf Z_D\leftarrow\mathbf Z_D^{\mathrm{base}} \\\\ \text{same mutable tensor before sequential position updates} \end{gathered}$$"| ZD
+    MBIAS -->|"$$\begin{gathered} \operatorname{add\_inplace}\ \mathbf Z_D[:,i,:]\mathrel{+}=\mathbf Z_{D,i}^M \\\\ \text{before sampling step }i \end{gathered}$$"| ZD
+    ZD -->|"$$\begin{gathered} \forall i\lt K_D,\ \tau=0:\ \arg\max \\\\ \forall i\lt K_D,\ \tau\neq0:\ \operatorname{softmax}\!\left(\mathbf Z_{D,:,i,:}/\max(\tau,10^{-5})\right) \\\\ \forall i\lt K_D,\ \tau\neq0:\ \text{exponential race per rank; no ID broadcast} \end{gathered}$$"| DOUT
     DOUT -->|"$$i+1\lt K_D:\ \text{next Markov-conditioning token}$$"| DPREFIX
-    DH -->|"$$\operatorname{concat}_{D,R_M}\!\left(\mathbf H_D,\mathbf E_D^M\right);\ \operatorname{Linear}_{\mathrm{FP32}}\!\left(W_c\in\mathbb R^{1\times(D+R_M)}\right)$$"| CONF
+    DH -->|"$$\begin{gathered} \operatorname{concat}_{D,R_M}\!\left(\mathbf H_D,\mathbf E_D^M\right) \\\\ \operatorname{Linear}_{\mathrm{FP32}}\!\left(W_c\in\mathbb R^{1\times(D+R_M)}\right) \end{gathered}$$"| CONF
     MEMB -->|"$$\text{confidence-conditioning operand}$$"| CONF
     DOUT -->|"$$\text{return component }1$$"| RETSPEC
     ZD -->|"$$\text{return component }2$$"| RETSPEC
@@ -776,7 +799,6 @@ For either attention or MoE, let
 $\mathbf R[b,s,j,d]\in\mathbb R^{B\times S\times M\times D}$ be the saved BF16 residual.
 The code aliases this tensor, then separately flattens and upcasts it for map generation and the
 pre-reduction:
-
 $$
 \widehat{\mathbf R}
 =
@@ -869,9 +891,15 @@ then narrows and calls `contiguous()`. ([kernel.py, lines
 
 Compression gates are feature-wise. With projected values $C_{r,f}$ and gate logits
 $Z_{r,f}$ for source position $r$ and feature $f$:
-
 $$
-\alpha_{r,f}=\frac{\exp(Z_{r,f}+\operatorname{APE}_{r,f})}{\sum_{u\in\mathcal{B}}\exp(Z_{u,f}+\operatorname{APE}_{u,f})},\qquad C_f^{\mathrm{new}}=\sum_{r\in\mathcal{B}}\alpha_{r,f}C_{r,f}.
+\alpha_{r,f}
+=
+\frac{\exp(Z_{r,f} + \text{APE}_{r,f})}
+{\sum_{u \in \mathcal{B}}\exp(Z_{u,f} + \text{APE}_{u,f})},\qquad 
+
+C_f^{\mathrm{new}} 
+= 
+\sum_{r \in \mathcal{B}} \alpha_{r,f}C_{r,f}.
 $$
 
 HCA uses one non-overlapping $\rho_H$-token source block. CSA projects two $d_h$ branches.
