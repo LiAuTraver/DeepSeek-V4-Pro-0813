@@ -289,7 +289,7 @@ flowchart TD
     MA_XL -->|"$$\operatorname{flatten}_{M,D};\ \mathrm{BF16}\to\mathrm{FP32}$$"| MA_XAFP
     MA_XAFP -->|"$$\begin{gathered} \operatorname{Linear}\!\left(W_{\mathrm{hc},a}^{\ell}\in\mathbb R^{D_{\mu}\times D_{\mathrm{hc}}}\right) \\\\ {}\times\operatorname{rsqrt}\!\left(\operatorname{mean}(\mathbf X^2)+\epsilon_n\right) \end{gathered}$$"| MA_MUA
     MA_MUA -->|"$$\begin{gathered} \operatorname{hc\_split\_sinkhorn}_{I_{\mathrm{SK}}}:\ \sigma,\ 2\sigma \\\\ \text{row-softmax and alternating normalizations} \end{gathered}$$"| MA_MAPA
-    MA_XAFP -->|"$$\begin{gathered} \operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D] \\\\ \mathbf U^a_{\ell}=\sum_{j=0}^{M-1}A^a_{\ell,j}\mathbf X^a_{\ell,\mathrm{FP32},j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MA_UA
+    MA_XAFP -->|"$$\begin{gathered} \operatorname{view}[B,S,D_{\mathrm{hc}}]\to[B,S,M,D] \\\\ \mathbf U^a_{\ell}=\sum_{j=0}^{M-1}A^a_{\ell,j}\mathbf X_{\ell,\mathrm{FP32},j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MA_UA
     MA_MAPA -->|"$$\mathbf A^a_{\ell}\ \text{is the reduction operand}$$"| MA_UA
     MA_UA -->|"$$\operatorname{RMSNorm}_{\gamma^{a}_{\ell},\epsilon_n};\ \text{FP32 statistics, BF16 output}$$"| MA_HA
     MA_YA -->|"$$\begin{gathered} \mathbf X_{\ell,k}^{a}=C_{\ell,k}^{a}\mathbf Y_{\ell}^{a}+\sum_{j=0}^{M-1}B_{\ell,j,k}^{a}\mathbf X_{\ell,j} \\\\ \mathrm{FP32}\to\mathrm{BF16} \end{gathered}$$"| MA_XA
@@ -799,6 +799,7 @@ For either attention or MoE, let
 $\mathbf R[b,s,j,d]\in\mathbb R^{B\times S\times M\times D}$ be the saved BF16 residual.
 The code aliases this tensor, then separately flattens and upcasts it for map generation and the
 pre-reduction:
+
 $$
 \widehat{\mathbf R}
 =
@@ -891,14 +892,15 @@ then narrows and calls `contiguous()`. ([kernel.py, lines
 
 Compression gates are feature-wise. With projected values $C_{r,f}$ and gate logits
 $Z_{r,f}$ for source position $r$ and feature $f$:
+
 $$
 \alpha_{r,f}
 =
 \frac{\exp(Z_{r,f} + \text{APE}_{r,f})}
-{\sum_{u \in \mathcal{B}}\exp(Z_{u,f} + \text{APE}_{u,f})},\qquad 
+{\sum_{u \in \mathcal{B}}\exp(Z_{u,f} + \text{APE}_{u,f})},\qquad
 
-C_f^{\mathrm{new}} 
-= 
+C_f^{\mathrm{new}}
+=
 \sum_{r \in \mathcal{B}} \alpha_{r,f}C_{r,f}.
 $$
 
@@ -1157,7 +1159,7 @@ treated as equivalent concepts.
 The production distinctions come from the paper's Sections 2.3.4, 3.1, 3.5, and 5.2.1
 (pp. 13, 15-16, 21-23, and 33-34). They are not silently projected onto the reference diagrams.
 
-## Implementation anchors
+## Implementation References
 
 - Configuration: [config-Flash-0731.json](inference/config-Flash-0731.json)
 - Model arguments, sharded embedding/linears, RMSNorm: [model.py, lines 34-202](inference/model.py#L34-L202)
