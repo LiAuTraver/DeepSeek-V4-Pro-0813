@@ -1,9 +1,8 @@
 *.*
-!encoding
-!inference
+!.vscode
+!encoding/*
+!inference/*
 !.gitattributes
 !.gitignore
 !*.json
 !*.md
-!V4FlashLegacy.mmd
-!V4Flash-Old.png
