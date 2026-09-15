@@ -1,5 +1,7 @@
 # DeepSeek-V4-Flash Attention Dataflow
 
+> to get link working, clone DeepSeek-V4-Pro-0813 from hugging face and create a dataflow/ folder then put the file underneath.
+
 This specification covers the main decoder attention sublayer, from the expanded
 residual input $\mathbf X_\ell$ through mHC ingress, SWA/CSA/HCA attention, and the post-attention
 residual $\mathbf X_\ell^a$. All numerical specializations use [config-Flash-0731.json](../inference/config-Flash-0731.json);
@@ -8,7 +10,7 @@ residual $\mathbf X_\ell^a$. All numerical specializations use [config-Flash-073
 > selects [**Pro**](https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813), with different dimensions;
 > nonetheless the [**Flash**](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731) has almost the same architecture.
 
-The [DeepSeek-V4 paper](../2606.19348v1.pdf), §§2.2–2.3, Figures 2–4, Equations (1)–(27),
+The [DeepSeek-V4 paper](https://arxiv.org/pdf/2606.19348), §§2.2–2.3, Figures 2–4, Equations (1)–(27),
 §3.5/Figure 6, §4.2.1, and §5.2.1 supplies the architectural cross-check.
 Executable details follow [model.py](../inference/model.py), [kernel.py](../inference/kernel.py), and
 [convert.py](../inference/convert.py).
@@ -154,7 +156,7 @@ flowchart TD
     style I1_INDEXER fill:#f5f3ff,stroke:#a78bfa,stroke-width:1.2px;
 ```
 
-Subgraphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
+Related Graphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
 [D1](#d1) / [D2](#d2), [E1](#e1) / [E2](#e2), [F0 scores](#f0),
 [F1](#f1) / [F2](#f2), [G3](#g3) / [G4](#g4), [G5](#g5),
 [H1 attention](#h1), [H2 output](#h2).
@@ -266,7 +268,7 @@ flowchart TD
     class I2_OUT output;
 ```
 
-Subgraphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
+Related Graphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
 [D1](#d1) / [D2](#d2), [E3](#e3) / [E4](#e4), [G1](#g1) / [G2](#g2),
 [G3](#g3) / [G4](#g4), [G5](#g5), [H1 attention](#h1), [H2 output](#h2).
 
@@ -337,7 +339,7 @@ flowchart TD
     class I0_OUT output;
 ```
 
-Subgraphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
+Related Graphs: [A1 maps](#a1), [A2 ingress/egress](#a2), [C stems](#c),
 [D1](#d1) / [D2](#d2), [G3](#g3) / [G4](#g4), [G5 identity](#g5),
 [H1 attention](#h1), [H2 output](#h2).
 
@@ -488,7 +490,7 @@ flowchart TD
     class A_A,A_C,A_B output;
 ```
 
-Subgraphs: [A2 uses maps and FP32 residual](#a2).
+Related Graphs: [A2 uses maps and FP32 residual](#a2).
 
 <a id="a2"></a>
 
@@ -559,7 +561,7 @@ flowchart TD
     class B_OUT output;
 ```
 
-Subgraphs: [A1 map inputs](#a1), [family paths C–H](#attention-overview), [P5 RMSNorm](#p5).
+Related Graphs: [A1 map inputs](#a1), [family paths C–H](#attention-overview), [P5 RMSNorm](#p5).
 
 <a id="primitives"></a>
 
@@ -649,7 +651,7 @@ flowchart TD
     class P1_Y output;
 ```
 
-Subgraphs: [C projections](#c), [F0 index query](#f0), [H2 output](#h2).
+Related Graphs: [C projections](#c), [F0 index query](#f0), [H2 output](#h2).
 
 <a id="p2"></a>
 
@@ -710,7 +712,7 @@ flowchart TD
     class P2_Y output;
 ```
 
-Subgraphs: [phase-table construction](#rope-table), [C callers](#c), [E emission callers](#e), [F0](#f0), [H2](#h2).
+Related Graphs: [phase-table construction](#rope-table), [C callers](#c), [E emission callers](#e), [F0](#f0), [H2](#h2).
 
 <a id="rope-table"></a>
 
@@ -800,7 +802,7 @@ flowchart TD
     class P3_Y output;
 ```
 
-Subgraphs: [shared FP8 scale arithmetic](#p1), [local KV](#c), [compressed KV](#e).
+Related Graphs: [shared FP8 scale arithmetic](#p1), [local KV](#c), [compressed KV](#e).
 
 <a id="p4"></a>
 
@@ -879,7 +881,7 @@ flowchart TD
     class P4_Y output;
 ```
 
-Subgraphs: [index queries](#f0), [prefill index keys](#e1-c), [decode index keys](#e2-c).
+Related Graphs: [index queries](#f0), [prefill index keys](#e1-c), [decode index keys](#e2-c).
 
 <a id="p5"></a>
 
@@ -1054,7 +1056,7 @@ flowchart TD
     class C_F,C_QR,C_Q,C_KVNOW output;
 ```
 
-Subgraphs: [A2 input](#a2), [P1 FP8 GEMM](#p1), [P2 RoPE](#p2), [P3 QDQ](#p3), [P5 RMSNorm](#p5), [indexer latent consumer](#f0), [core query consumer](#h1).
+Related Graphs: [A2 input](#a2), [P1 FP8 GEMM](#p1), [P2 RoPE](#p2), [P3 QDQ](#p3), [P5 RMSNorm](#p5), [indexer latent consumer](#f0), [core query consumer](#h1).
 
 <a id="d"></a>
 
@@ -1122,7 +1124,7 @@ flowchart TD
     class D1_OUT index;
 ```
 
-Subgraphs: [prefill bank](#g3), [index-list assembly](#g5).
+Related Graphs: [prefill bank](#g3), [index-list assembly](#g5).
 
 <a id="d2"></a>
 
@@ -1165,7 +1167,7 @@ flowchart TD
     class D2_OUT index;
 ```
 
-Subgraphs: [decode bank](#g4), [index-list assembly](#g5).
+Related Graphs: [decode bank](#g4), [index-list assembly](#g5).
 
 <a id="e"></a>
 
@@ -1315,7 +1317,7 @@ flowchart LR
     style E1_REMAINDER fill:#f0fdf4,stroke:#22c55e,stroke-width:1px;
 ```
 
-Subgraphs: [attention input](#c), [completed-prefix pooling](#e1-b), [next-call state insertion](#e2-a).
+Related Graphs: [attention input](#c), [completed-prefix pooling](#e1-b), [next-call state insertion](#e2-a).
 
 <a id="e1-b"></a>
 
@@ -1418,7 +1420,7 @@ flowchart LR
     style E1_POOLING fill:#faf5ff,stroke:#a78bfa,stroke-width:1px;
 ```
 
-Subgraphs: [projection/state inputs](#e1-a), [P6 gated pool](#p6), [emission tail](#e1-c).
+Related Graphs: [projection/state inputs](#e1-a), [P6 gated pool](#p6), [emission tail](#e1-c).
 
 <a id="e1-c"></a>
 
@@ -1472,7 +1474,7 @@ flowchart TB
     style E1_INSTANCES fill:#f0fdf4,stroke:#22c55e,stroke-width:1px;
 ```
 
-Subgraphs: [pooled input](#e1-b), [P5 norm](#p5), [P2 RoPE](#p2), [P3 main KV](#p3), [P4 index KV](#p4), [main bank](#g3), [index scores](#f0).
+Related Graphs: [pooled input](#e1-b), [P5 norm](#p5), [P2 RoPE](#p2), [P3 main KV](#p3), [P4 index KV](#p4), [main bank](#g3), [index scores](#f0).
 
 | IDs           | Operation detail                                                                                                                                                                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1575,7 +1577,7 @@ flowchart LR
     style E2_CLOCK fill:#f8fafc,stroke:#94a3b8,stroke-width:1px;
 ```
 
-Subgraphs: [prefill state](#e1-a), [completion pool](#e2-b), [emission tail](#e2-c).
+Related Graphs: [prefill state](#e1-a), [completion pool](#e2-b), [emission tail](#e2-c).
 
 <a id="e2-b"></a>
 
@@ -1652,7 +1654,7 @@ flowchart TB
     style E2_ROLL fill:#fffaf0,stroke:#d97706,stroke-width:1px;
 ```
 
-Subgraphs: [updated state](#e2-a), [P6 gated pool](#p6), [emission](#e2-c).
+Related Graphs: [updated state](#e2-a), [P6 gated pool](#p6), [emission](#e2-c).
 
 <a id="e2-c"></a>
 
@@ -1719,7 +1721,7 @@ flowchart TB
     style E2_INSTANCES fill:#f0fdf4,stroke:#22c55e,stroke-width:1px;
 ```
 
-Subgraphs: [pooled input](#e2-b), [P5 norm](#p5), [P2 RoPE](#p2), [P3 main KV](#p3), [P4 index KV](#p4), [main bank](#g4), [index scores](#f0).
+Related Graphs: [pooled input](#e2-b), [P5 norm](#p5), [P2 RoPE](#p2), [P3 main KV](#p3), [P4 index KV](#p4), [main bank](#g4), [index scores](#f0).
 
 E2 operation details moved out of long arrows:
 
@@ -1849,7 +1851,7 @@ flowchart LR
     style E3_PREFIX fill:#faf5ff,stroke:#a78bfa,stroke-width:1px;
 ```
 
-Subgraphs: [attention input](#c), [P6 gated pool](#p6), [emission](#e3-b), [next-call state](#e4-a).
+Related Graphs: [attention input](#c), [P6 gated pool](#p6), [emission](#e3-b), [next-call state](#e4-a).
 
 <a id="e3-b"></a>
 
@@ -1887,7 +1889,7 @@ flowchart TB
     class E3_OUT output;
 ```
 
-Subgraphs: [pooled input](#e3-a), [P5 norm](#p5), [P2 RoPE](#p2), [P3 QDQ](#p3), [prefill bank](#g3).
+Related Graphs: [pooled input](#e3-a), [P5 norm](#p5), [P2 RoPE](#p2), [P3 QDQ](#p3), [prefill bank](#g3).
 
 E3 operation details moved out of long arrows:
 
@@ -1988,7 +1990,7 @@ flowchart LR
     style E4_CLOCK fill:#f8fafc,stroke:#94a3b8,stroke-width:1px;
 ```
 
-Subgraphs: [prefill state](#e3-a), [completed-block pool/emission](#e4-b).
+Related Graphs: [prefill state](#e3-a), [completed-block pool/emission](#e4-b).
 
 <a id="e4-b"></a>
 
@@ -2059,7 +2061,7 @@ flowchart TB
     style E4_POSITION fill:#f0fdf4,stroke:#4ade80,stroke-width:1px;
 ```
 
-Subgraphs: [updated state](#e4-a), [P6 pool](#p6), [P5 norm](#p5), [P2 RoPE](#p2), [P3 QDQ](#p3), [decode bank](#g4).
+Related Graphs: [updated state](#e4-a), [P6 pool](#p6), [P5 norm](#p5), [P2 RoPE](#p2), [P3 QDQ](#p3), [decode bank](#g4).
 
 E4 operation details moved out of long arrows:
 
@@ -2149,7 +2151,7 @@ flowchart TD
     class F0_J output;
 ```
 
-Subgraphs: [query latent/input](#c), [prefill index compressor](#e1), [decode index compressor](#e2), [P1](#p1), [P2](#p2), [P4](#p4), [prefill selection](#f1), [decode selection](#f2).
+Related Graphs: [query latent/input](#c), [prefill index compressor](#e1), [decode index compressor](#e2), [P1](#p1), [P2](#p2), [P4](#p4), [prefill selection](#f1), [decode selection](#f2).
 
 <a id="f1"></a>
 
@@ -2220,7 +2222,7 @@ flowchart TD
     class F1_IDX,F1_OFF,F1_SEL,F1_CAST,F1_OUT index;
 ```
 
-Subgraphs: [score inputs](#f0), [prefill bank](#g3), [index-list assembly](#g5).
+Related Graphs: [score inputs](#f0), [prefill bank](#g3), [index-list assembly](#g5).
 
 <a id="f2"></a>
 
@@ -2250,7 +2252,7 @@ flowchart TD
     class F2_IDX,F2_OFF,F2_CAST,F2_OUT index;
 ```
 
-Subgraphs: [score inputs](#f0), [decode bank](#g4), [index-list assembly](#g5).
+Related Graphs: [score inputs](#f0), [decode bank](#g4), [index-list assembly](#g5).
 
 <a id="g"></a>
 
@@ -2310,7 +2312,7 @@ flowchart TD
     class G1_OUT index;
 ```
 
-Subgraphs: [HCA prefill compression](#e3), [prefill bank](#g3), [index-list assembly](#g5).
+Related Graphs: [HCA prefill compression](#e3), [prefill bank](#g3), [index-list assembly](#g5).
 
 <a id="g2"></a>
 
@@ -2346,7 +2348,7 @@ flowchart TD
     class G2_OUT index;
 ```
 
-Subgraphs: [HCA decode compression](#e4), [decode bank](#g4), [index-list assembly](#g5).
+Related Graphs: [HCA decode compression](#e4), [decode bank](#g4), [index-list assembly](#g5).
 
 <a id="g3"></a>
 
@@ -2450,7 +2452,7 @@ flowchart LR
     style G3_ACTIVE fill:#f0fdf4,stroke:#22c55e,stroke-width:1px;
 ```
 
-Subgraphs: [local KV](#c), [CSA emission](#e1-c), [HCA emission](#e3-b), [attention consumer](#h1).
+Related Graphs: [local KV](#c), [CSA emission](#e1-c), [HCA emission](#e3-b), [attention consumer](#h1).
 
 <a id="g4"></a>
 
@@ -2490,7 +2492,7 @@ flowchart TD
     class G4_BANK output;
 ```
 
-Subgraphs: [local KV](#c), [CSA state/emission](#e2-c), [HCA state/emission](#e4-b), [attention consumer](#h1).
+Related Graphs: [local KV](#c), [CSA state/emission](#e2-c), [HCA state/emission](#e4-b), [attention consumer](#h1).
 
 <a id="g5"></a>
 
@@ -2519,7 +2521,7 @@ flowchart TD
     class G5_I index;
 ```
 
-Subgraphs: [D1](#d1), [D2](#d2), [F1](#f1), [F2](#f2), [G1](#g1), [G2](#g2), [attention consumer](#h1).
+Related Graphs: [D1](#d1), [D2](#d2), [F1](#f1), [F2](#f2), [G1](#g1), [G2](#g2), [attention consumer](#h1).
 
 <a id="h"></a>
 
@@ -2536,14 +2538,11 @@ unless the wrapper's minimum-head padding branch is active, in which case it equ
 
 Reference implementation: [kernel.py, lines 277-368](../inference/kernel.py#L277-L368).
 
-The loop body is drawn in static-single-assignment form as the state transition
+The loop body is drawn in SSA form as the state transition
 $\mathcal R_u\rightarrow\mathcal R_{u+1}$. Each $\mathcal R$ box is only a diagram-level
 record of three independent FP32 fragment buffers (`max_acc`, `den_acc`, and `num_acc`),
 not a packed tensor. The serial loop controller aliases $\mathcal R_{u+1}$ as the next
-body instance's input without a tensor operation; $u$ is the only iterator. This avoids
-materializing the source-level loop-control tests or duplicating three $u-1/u$ tensor families.
-The wrapper prepares both padded query and sink operands before kernel dispatch; the sink
-branch is drawn beside its first consumer below only to keep the dataflow local.
+body instance's input without a tensor operation; $u$ is the only iterator.
 
 <a id="h1-a"></a>
 
@@ -2570,6 +2569,8 @@ $c^{-1/2}$. The equation is architectural (paper Eq. (27)); the graph preserves 
 arithmetic: FP32 exponentials contribute to the denominator, but BF16-rounded exponential
 tiles feed the numerator GEMM. Do not substitute a dense FP32 softmax and assume bitwise equality.
 
+> Not sure the actual implementation _shuold_ be a loop or so, depends on the local memory / pipeline using DMA. under investigating.
+
 ```mermaid
 %%{init: {"theme": "base", "layout": "elk", "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 22, "rankSpacing": 34}}}%%
 flowchart TD
@@ -2589,7 +2590,7 @@ flowchart TD
         H1_U["$$u\;[\mathrm{INT64\ serial\ loop\ iterator};\ 0\le u\lt T_K]$$"]
         H1_QT["$$\widehat{\mathbf Q}_{\ell,b,t}^{(p)}\in\mathbb R^{\widehat n_h^{(p)}\times c}\;[\mathrm{BF16\ shared\ tile}]$$"]
     end
-    subgraph H1_INIT["One-time FP32 loop-state initialization"]
+    subgraph H1_INIT["Loop initialization"]
         direction TD
         H1_ZERO["$$0\;[\mathrm{FP32\ scalar}]$$"]
         H1_NEGINF["$$-\infty\;[\mathrm{FP32\ scalar}]$$"]
@@ -2701,7 +2702,7 @@ flowchart TD
     style H1_STATE fill:#faf5ff,stroke:#a78bfa,stroke-width:1px;
 ```
 
-Subgraphs: [queries](#c), [prefill KV bank](#g3), [decode KV bank](#g4), [indices](#g5), [sink and final output](#h1-b).
+Related Graphs: [queries](#c), [prefill KV bank](#g3), [decode KV bank](#g4), [indices](#g5), [sink and final output](#h1-b).
 
 <a id="h1-b"></a>
 
@@ -2755,7 +2756,7 @@ flowchart TD
     style H1_SINKPAD fill:#f8fbff,stroke:#60a5fa,stroke-width:1px;
 ```
 
-Subgraphs: [final loop state](#h1-a), [output projection](#h2).
+Related Graphs: [final loop state](#h1-a), [output projection](#h2).
 
 <a id="h2"></a>
 
@@ -2797,7 +2798,8 @@ flowchart TD
     H2_YR["$$\mathbf Y_{\ell}^{a,32}\in\mathbb R^{B\times n\times d}\;[\mathrm{FP32}]$$"]
     H2_Y["$$\mathbf Y_{\ell}^{a}\in\mathbb R^{B\times n\times d}\;[\mathrm{BF16}]$$"]
 
-    H2_O & H2_F -->|"$$[\mathrm{H2.01}]\ \text{inline P2 with conjugated query-position phase}$$"| H2_OR
+    H2_O -->|"$$[\mathrm{H2.01}]$$"| H2_OR
+    H2_F -->|"$$[\mathrm{H2.01}]\ \text{inline P2 with conjugated query-position phase}$$"| H2_OR
     H2_OR -->|"$$[\mathrm{H2.02}]\ \operatorname{ReshapeView}_{n_h^{(p)},c\rightarrow g^{(p)},h_gc}$$"| H2_OGRP
     H2_WRAW -->|"$$[\mathrm{H2.03}]\ \operatorname{ReshapeView}_{g^{(p)},d_g,h_gc}$$"| H2_W
     H2_OGRP & H2_W -->|"$$[\mathrm{H2.04}]\ \operatorname{GroupedGEMM}_{\mathrm{BF16}}\ \text{over }h_gc$$"| H2_OG
@@ -2818,7 +2820,9 @@ flowchart TD
     class H2_Y output;
 ```
 
-Subgraphs: [core output](#h1-b), [P2 inverse RoPE](#p2), [P1 output GEMM](#p1), [A2 egress](#a2).
+Related Graphs: [core output](#h1-b), [P2 inverse RoPE](#p2), [P1 output GEMM](#p1), [A2 egress](#a2).
+
+> Info below mostly for LLM as a quick rewind, you won't be needed to read these if you know what's going on.
 
 <a id="i"></a>
 
@@ -2929,27 +2933,21 @@ are specified in the nearby tables; `dtype="fp8"` selects ordinary linear weight
 not set activation/cache allocation dtype. `generate.py` sets BF16 explicitly. Enforce
 [state lifetime](#cache-lifetime) and [cache alias/stride rules](#g3); complete every state/cache
 write before the corresponding same-call reader.
-(Sources: [generation setup](../inference/generate.py#L72-L88),
-[runtime dtype setup](../inference/model.py#L880-L886), [cache flow](../inference/model.py#L285-L538).)
 
 **Precision of standard operators.** BF16 labels on PyTorch GEMMs/reductions specify
 input/output boundaries; they do not require accumulating each multiply/add in BF16.
 The Python code does not fix their internal reduction tree. P5 and the explicit C06–C10
-head rescale therefore remain distinct contracts. (Source: [model.py](../inference/model.py#L189-L202),
-[query rescale](../inference/model.py#L499-L503).)
+head rescale therefore remain distinct contracts.
 
 **Exact scale construction and layout.** P1's output feature index $o$ uses weight scale
 $s_w[\lfloor o/128\rfloor,j]$ for K block $j$, paired with activation scale $s_x[r,j]$.
-Conversion
-of scale magnitudes uses `fast_log2_ceil`/`fast_pow2`: for a positive normal FP32 value with
+Conversion of scale magnitudes uses `fast_log2_ceil`/`fast_pow2`: for a positive normal FP32 value with
 biased exponent $e$ and mantissa bits $u$, the rounded exponent is $e-127+[u\ne0]$;
 construct $2^k$ by reinterpreting `(k+127)<<23`. A generic approximate `log2`/`pow` replacement
 can change the scale at a power-of-two boundary. Quantized-value
 rounding must match the reference backend; the Python wrapper does not specify a portable C
 rounding policy. H2.05 implements `flatten(2)` and may copy if the grouped `einsum` result's
 strides cannot be collapsed; an NPU may instead produce the required contiguous layout directly.
-([kernel.py](../inference/kernel.py#L22-L273), [model.py](../inference/model.py#L539-L548),
-[PyTorch flatten contract](https://docs.pytorch.org/docs/2.14/generated/torch.flatten.html).)
 
 **Main attention arithmetic.** Keep the window-first index ordering, including padding, and
 64-entry tiles. The first tile contains at least one valid local token for every supported call;
